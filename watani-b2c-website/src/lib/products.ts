@@ -93,16 +93,21 @@ type ApiProductPage = {
 };
 
 function toProduct(dto: ApiProduct): Product {
+    const priceNum = typeof dto.price === 'number' ? dto.price : parseFloat(String(dto.price || '0')) || 0;
+    const priceParts = priceNum.toFixed(2).split('.');
+    const priceMajor = String(dto.priceMajor || priceParts[0] || '0');
+    const priceMinor = String(dto.priceMinor || priceParts[1] || '00');
+
     return {
         id: String(dto.id),
         defaultVariantId: dto.defaultVariantId ?? (typeof dto.id === "number" ? dto.id : parseInt(String(dto.id), 10) || 1),
-        slug: dto.slug,
-        name: dto.name,
-        fullName: dto.fullName,
+        slug: dto.slug || `product-${dto.id}`,
+        name: dto.name || 'Palestinian Product',
+        fullName: dto.fullName || dto.name || 'Authentic Palestinian Product',
         subtitle: dto.subtitle ?? "",
-        unit: dto.unit,
-        priceMajor: dto.priceMajor,
-        priceMinor: dto.priceMinor,
+        unit: dto.unit || '1 Unit',
+        priceMajor,
+        priceMinor,
         compareAtMajor: dto.compareAtMajor ?? undefined,
         compareAtMinor: dto.compareAtMinor ?? undefined,
         image: dto.image ?? "",
@@ -388,10 +393,11 @@ export async function getShippingPolicy(): Promise<string | null> {
 export async function getCategories(): Promise<Category[]> {
     try {
         const res = await apiFetch<Category[]>("/api/catalogue/categories");
-        return res || [];
+        if (Array.isArray(res) && res.length > 0) return res;
+        return fallbackCategories;
     } catch (error) {
         console.error("Error fetching categories from database:", error);
-        return [];
+        return fallbackCategories;
     }
 }
 

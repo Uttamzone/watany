@@ -130,11 +130,12 @@ export function CatalogueBrowser({
                 multi: true,
                 list: true,
                 // Copy before sorting - `categories` is a prop and must not be mutated.
-                options: [...categories]
-                    .sort((a, b) => a.name.localeCompare(b.name))
+                options: (Array.isArray(categories) ? [...categories] : [])
+                    .filter(c => Boolean(c && c.slug))
+                    .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
                     .map((category) => ({
                         value: category.slug,
-                        label: category.name,
+                        label: category.name || category.slug,
                     })),
             },
             {key: "price", label: "Price", options: priceBands},

@@ -58,7 +58,7 @@ async function getProducts(req, res) {
         const countQuery = `
             SELECT COUNT(DISTINCT products.id) as total
             FROM products
-            JOIN categories ON products.category_id = categories.id
+            LEFT JOIN categories ON products.category_id = categories.id
             WHERE ${whereClauses.join(' AND ')};
         `;
         const countRes = await db.query(countQuery, params);
@@ -73,7 +73,7 @@ async function getProducts(req, res) {
                    products.badge, products.rating_average as rating, products.review_count as "reviewCount",
                    products.region, products.material, products.color
             FROM products
-            JOIN categories ON products.category_id = categories.id
+            LEFT JOIN categories ON products.category_id = categories.id
             WHERE ${whereClauses.join(' AND ')}
             ORDER BY ${orderBy}
             LIMIT $${paramIdx} OFFSET $${paramIdx + 1};
@@ -93,6 +93,10 @@ async function getProducts(req, res) {
 
             const priceInfo = await resolvePrice(defaultVariant.id, buyerGroup, 1);
 
+            const priceVal = typeof priceInfo.price === 'number' ? priceInfo.price : 25.00;
+            const priceMajor = String(priceInfo.priceMajor || Math.floor(priceVal));
+            const priceMinor = String(priceInfo.priceMinor || '00');
+
             content.push({
                 id: p.id,
                 defaultVariantId: defaultVariant.id,
@@ -102,12 +106,12 @@ async function getProducts(req, res) {
                 subtitle: p.subtitle,
                 unit: defaultVariant.unit || 'unit',
                 sku: defaultVariant.sku || `SKU-${p.id}`,
-                category: p.category,
+                category: p.category || 'olive-oil',
                 badge: p.badge,
                 image,
                 description: p.description,
-                priceMajor: priceInfo.priceMajor,
-                priceMinor: priceInfo.priceMinor,
+                priceMajor,
+                priceMinor,
                 compareAtMajor: priceInfo.compareAtMajor,
                 compareAtMinor: priceInfo.compareAtMinor,
                 price: priceInfo.price,
@@ -164,7 +168,7 @@ async function getProductBySlug(req, res) {
                    products.badge, products.rating_average as rating, products.review_count as "reviewCount",
                    products.region, products.material, products.color
             FROM products
-            JOIN categories ON products.category_id = categories.id
+            LEFT JOIN categories ON products.category_id = categories.id
             LEFT JOIN brands ON products.brand_id = brands.id
             WHERE products.slug = $1 AND products.active = TRUE;
         `, [slug]);

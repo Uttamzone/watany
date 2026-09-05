@@ -34,7 +34,7 @@ export default async function CategoriesPage(props: PageProps<"/categories">) {
     ]);
 
     const rawCategory = first(searchParams.category);
-    const category = categories.some((item) => item.slug === rawCategory)
+    const category = Array.isArray(categories) && categories.some((item) => item?.slug === rawCategory)
         ? (rawCategory as CategorySlug)
         : undefined;
 

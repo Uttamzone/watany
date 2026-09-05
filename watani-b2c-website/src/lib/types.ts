@@ -122,14 +122,17 @@ export type Category = {
 
 /** Numeric price in CAD, derived from the split major/minor representation. */
 export function priceOf(product: Product): number {
-    return Number(`${product.priceMajor.replace(/,/g, "")}.${product.priceMinor}`);
+    if (!product) return 0;
+    const major = String(product.priceMajor || "0").replace(/,/g, "");
+    const minor = String(product.priceMinor || "00");
+    return Number(`${major}.${minor}`) || 0;
 }
 
 export function compareAtPriceOf(product: Product): number | null {
-    if (!product.compareAtMajor || !product.compareAtMinor) return null;
-    return Number(
-        `${product.compareAtMajor.replace(/,/g, "")}.${product.compareAtMinor}`,
-    );
+    if (!product || !product.compareAtMajor || !product.compareAtMinor) return null;
+    const major = String(product.compareAtMajor || "0").replace(/,/g, "");
+    const minor = String(product.compareAtMinor || "00");
+    return Number(`${major}.${minor}`) || null;
 }
 
 export function formatCad(value: number): string {
