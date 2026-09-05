@@ -225,10 +225,11 @@ async function createIntent(req, res) {
         }
 
         // Determine shipping cost and carrier dynamically based on Freightcom rates and pallet calculation
+        const region = shippingAddress ? (shippingAddress.region || 'ON').toUpperCase() : 'ON';
         const destObj = {
             line1: shippingAddress ? shippingAddress.line1 : '',
             city: shippingAddress ? shippingAddress.city : '',
-            region: shippingAddress ? (shippingAddress.region || 'ON').toUpperCase() : 'ON',
+            region,
             postalCode: shippingAddress ? shippingAddress.postalCode : '',
             country: shippingAddress ? (shippingAddress.country || 'CA').toUpperCase() : 'CA'
         };
@@ -421,7 +422,7 @@ async function createIntent(req, res) {
                     line_items: stripeLineItems,
                     mode: 'payment',
                     success_url: `${domain}/checkout/confirmation?order=${encodeURIComponent(orderNumber)}`,
-                    cancel_url: `${domain}/checkout?step=shipping&canceled=1`,
+                    cancel_url: `${domain}/checkout?canceled=1`,
                     client_reference_id: orderNumber,
                     customer_email: userEmail && userEmail.includes('@') && !userEmail.includes('.local') ? userEmail : undefined,
                     metadata: {

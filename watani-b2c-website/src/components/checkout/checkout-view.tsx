@@ -181,20 +181,23 @@ export function CheckoutView() {
             if (draft.serviceCode) setServiceCode(draft.serviceCode);
         }
 
-        let shouldGoToShipping = draft?.step === "shipping";
+        let shouldGoToShipping = false;
         let isCanceled = false;
 
         if (typeof window !== "undefined") {
             const params = new URLSearchParams(window.location.search);
-            if (params.get("step") === "shipping" || params.get("canceled") === "1") {
-                shouldGoToShipping = true;
-            }
             if (params.get("canceled") === "1") {
                 isCanceled = true;
+                // Clean the query parameters so canceling payment doesn't permanently leave URL dirty
+                const cleanUrl = window.location.pathname;
+                window.history.replaceState({}, "", cleanUrl);
+            } else if (params.get("step") === "shipping") {
+                shouldGoToShipping = true;
             }
         }
 
-        if (shouldGoToShipping && targetAddress?.line1 && targetAddress?.city) {
+        // Only transition to shipping if user explicitly requested it via URL (not canceled) and address exists
+        if (shouldGoToShipping && !isCanceled && targetAddress?.line1 && targetAddress?.city) {
             getShippingQuotes(targetAddress)
                 .then((options) => {
                     setQuotes(options);
@@ -203,16 +206,18 @@ export function CheckoutView() {
                         : (options[0]?.serviceCode ?? null);
                     setServiceCode(code);
                     setStep("shipping");
-                    if (isCanceled) {
-                        notifications.info(
-                            "Checkout returned",
-                            "Payment was not completed. You can choose your shipping method or try again.",
-                        );
-                    }
                 })
                 .catch(() => {
-                    setStep("shipping");
+                    setStep("details");
                 });
+        } else {
+            setStep("details");
+            if (isCanceled) {
+                notifications.info(
+                    "Checkout returned",
+                    "Payment was not completed. Your details are saved below; review or update them before proceeding.",
+                );
+            }
         }
 
         setRestored(true);
@@ -337,6 +342,16 @@ export function CheckoutView() {
             })),
         [address],
     );
+
+    const goToDetails = useCallback(() => {
+        setStep("details");
+        if (typeof window !== "undefined") {
+            const url = new URL(window.location.href);
+            url.searchParams.delete("step");
+            url.searchParams.delete("canceled");
+            window.history.replaceState({}, "", url.pathname + (url.search ? url.search : ""));
+        }
+    }, []);
 
     async function goToShipping(event: React.FormEvent) {
         event.preventDefault();
@@ -477,6 +492,46 @@ export function CheckoutView() {
                         to save this order to your account.
                     </p>
                 )}
+
+                {/* Stepper Navigation */}
+                <div className="mb-6 flex items-center gap-2 sm:gap-3 rounded-[16px] bg-white border border-black/10 p-2 shadow-xs">
+                    <button
+                        type="button"
+                        onClick={goToDetails}
+                        className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-[12px] text-[13px] font-bold transition-all ${
+                            step === "details"
+                                ? "bg-teal-950 text-white shadow-sm"
+                                : "text-teal-950/75 hover:text-teal-950 hover:bg-black/5 cursor-pointer"
+                        }`}
+                    >
+                        <span className={`size-5 rounded-full flex items-center justify-center text-[11px] font-extrabold ${step === "details" ? "bg-lime-400 text-teal-950" : "bg-black/10 text-teal-950"}`}>
+                            1
+                        </span>
+                        <span>1. Details &amp; Address</span>
+                    </button>
+
+                    <span className="text-black/20 text-xs font-bold select-none">&rarr;</span>
+
+                    <button
+                        type="button"
+                        onClick={() => {
+                            if (address.line1 && address.city) {
+                                setStep("shipping");
+                            }
+                        }}
+                        disabled={!address.line1 || !address.city}
+                        className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-[12px] text-[13px] font-bold transition-all ${
+                            step === "shipping"
+                                ? "bg-teal-950 text-white shadow-sm"
+                                : "text-teal-950/50 hover:text-teal-950 disabled:opacity-40 disabled:cursor-not-allowed"
+                        }`}
+                    >
+                        <span className={`size-5 rounded-full flex items-center justify-center text-[11px] font-extrabold ${step === "shipping" ? "bg-lime-400 text-teal-950" : "bg-black/10 text-teal-950"}`}>
+                            2
+                        </span>
+                        <span>2. Shipping &amp; Payment</span>
+                    </button>
+                </div>
 
                 {step === "details" ? (
                     <form
@@ -666,6 +721,16 @@ export function CheckoutView() {
                     </form>
                 ) : (
                     <div className="rounded-[22px] bg-white border border-black/10 shadow-md p-6">
+                        <div className="mb-4">
+                            <button
+                                type="button"
+                                onClick={goToDetails}
+                                className="inline-flex items-center gap-1.5 text-[13px] font-bold text-teal-800 hover:text-teal-950 hover:underline"
+                            >
+                                &larr; Back to contact &amp; delivery details
+                            </button>
+                        </div>
+
                         <h2 className="text-[18px] font-extrabold text-teal-950">
                             Shipping method
                         </h2>
@@ -677,7 +742,7 @@ export function CheckoutView() {
                             </p>
                             <button
                                 type="button"
-                                onClick={() => setStep("details")}
+                                onClick={goToDetails}
                                 className="shrink-0 text-[13px] font-bold text-teal-950 underline underline-offset-4"
                             >
                                 Edit
