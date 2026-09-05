@@ -122,24 +122,16 @@ export function CorporateHero() {
                         variants={child}
                         className="max-w-[16ch] text-[29px] font-extrabold leading-[1.06] sm:max-w-[24ch] sm:text-[40px] lg:max-w-[26ch] lg:text-[46px]"
                     >
-                        Palestinian retail,{" "}
-                        <span className="text-lime-400">wholesale &amp; bulk</span> &amp; Amanat
+                        Palestinian wholesale,{" "}
+                        <span className="text-lime-400">case buying</span> &amp; Amanat
                         shipping
                     </motion.h1>
 
                     <motion.p
                         variants={child}
-                        className="mt-3.5 max-w-xl text-[14px] leading-relaxed text-white/75 sm:mt-5 sm:text-[15px] lg:text-[16px]"
+                        className="mt-3.5 max-w-xl text-[14px] leading-relaxed text-white/85 sm:mt-5 sm:text-[15px] lg:text-[16px]"
                     >
-                        Watani &amp; Sons Corp supplies authentic Palestinian products to
-                        businesses, families, organizations and communities
-                        <span className="hidden sm:inline">
-                            {" "}
-                            &mdash; handmade Hebron ceramics, tatreez, clothing and kufiyas,
-                            zaatar, sumac, extra virgin olive oil, Nabulsi cheese, ghee, olives
-                            and freekeh
-                        </span>
-                        .
+                        For distributors, retailers, businesses and organizations buying by the case or box.
                     </motion.p>
 
                     <motion.div

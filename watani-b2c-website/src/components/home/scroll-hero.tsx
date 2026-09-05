@@ -18,7 +18,7 @@ export function ScrollHeroLanding() {
       mediaSrc="/art/hero-olive-scene.jpeg"
       bgImageSrc="/art/hero-olive-scene.jpeg"
       title="Watani & Sons"
-      date="Palestinian Wholesale & Bulk"
+      date="Palestinian Wholesale, Case Buying & Amanat"
       scrollToExpand="Scroll to Expand"
       textBlend
     >
