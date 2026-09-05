@@ -1,0 +1,52 @@
+# Single-origin routing (no CORS/cross-site cookie): /api,/uploads,/actuator
+# -> backend, / -> frontend. One cert covers both wataniandsons.ca and www.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: watani
+  namespace: watani
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.middlewares: watani-watani-rate-limit@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - wataniandsons.ca
+        - www.wataniandsons.ca
+      secretName: watani-tls
+  rules:
+    - host: wataniandsons.ca
+      http:
+        paths: &appPaths
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: watani-b2c-service
+                port:
+                  number: 8080
+          - path: /uploads
+            pathType: Prefix
+            backend:
+              service:
+                name: watani-b2c-service
+                port:
+                  number: 8080
+          - path: /actuator
+            pathType: Prefix
+            backend:
+              service:
+                name: watani-b2c-service
+                port:
+                  number: 8080
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: watani-b2c-website
+                port:
+                  number: 3000
+    - host: www.wataniandsons.ca
+      http:
+        paths: *appPaths

@@ -1,0 +1,39 @@
+name: Deploy backend
+
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up SSH key
+        run: |
+          install -m 600 -D /dev/null ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_REMOTE_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Write .env.deploy
+        run: |
+          cat > .env.deploy <<EOF
+          REMOTE_USER=${{ secrets.DEPLOY_REMOTE_USER }}
+          REMOTE_HOST=${{ secrets.DEPLOY_REMOTE_HOST }}
+          SSH_KEY=$HOME/.ssh/deploy_key
+          NEXT_PUBLIC_API_BASE_URL=${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
+          NEXT_PUBLIC_SITE_URL=${{ secrets.NEXT_PUBLIC_SITE_URL }}
+          EOF
+
+      - name: Deploy backend
+        run: ./deploy-backend.sh
+
+      - name: Clean up secrets
+        if: always()
+        run: |
+          rm -f .env.deploy ~/.ssh/deploy_key

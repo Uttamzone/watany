@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: watani-b2c-website
+  namespace: watani
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  minReadySeconds: 5
+  selector:
+    matchLabels:
+      app: watani-b2c-website
+  template:
+    metadata:
+      labels:
+        app: watani-b2c-website
+    spec:
+      containers:
+        - name: watani-b2c-website
+          # NEXT_PUBLIC_API_BASE_URL is baked in at build time, not runtime - changing it needs a rebuild.
+          image: watani-b2c-website:v1
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 3000
+          env:
+            # Bounds V8's heap explicitly rather than relying on Node's own cgroup-limit
+            # detection - caps it below the 512Mi container limit, leaving headroom for
+            # non-heap overhead (buffers, native modules, thread stacks).
+            - name: NODE_OPTIONS
+              value: "--max-old-space-size=384"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              # Keeps accepting connections briefly so Traefik's endpoint removal can propagate first.
+              exec:
+                command: ["sh", "-c", "sleep 5"]
+      terminationGracePeriodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: watani-b2c-website
+  namespace: watani
+spec:
+  selector:
+    app: watani-b2c-website
+  ports:
+    - port: 3000
+      targetPort: 3000

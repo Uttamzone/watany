@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-label="ceramic bottle olives" width="400" height="400">
+<title>ceramic bottle olives</title>
+<defs>
+<linearGradient id="oil" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfa227"/><stop offset="1" stop-color="#9c7414"/></linearGradient>
+<linearGradient id="tin" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#d8b34a"/><stop offset=".45" stop-color="#f0d47f"/><stop offset="1" stop-color="#b8912f"/></linearGradient>
+<linearGradient id="glass" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#4a6a35"/><stop offset=".45" stop-color="#7ea354"/><stop offset="1" stop-color="#3d5a2b"/></linearGradient>
+<linearGradient id="pail" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#e4e9e2"/><stop offset=".45" stop-color="#ffffff"/><stop offset="1" stop-color="#d3dad0"/></linearGradient>
+<linearGradient id="pouch" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#4d7c2f"/><stop offset=".45" stop-color="#74a84a"/><stop offset="1" stop-color="#416b27"/></linearGradient>
+<linearGradient id="jar" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#9fc27a" stop-opacity=".85"/><stop offset=".45" stop-color="#cfe3b4" stop-opacity=".9"/><stop offset="1" stop-color="#8fb06b" stop-opacity=".85"/></linearGradient>
+<linearGradient id="cer" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#e8eef3"/><stop offset=".45" stop-color="#ffffff"/><stop offset="1" stop-color="#dde6ee"/></linearGradient>
+<radialGradient id="shadow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#00302d" stop-opacity=".18"/><stop offset="1" stop-color="#00302d" stop-opacity="0"/></radialGradient>
+</defs>
+<ellipse cx="200" cy="352" rx="118" ry="20" fill="url(#shadow)"/>
+
+<path d="M178 128 l44 0 l0 40 q28 22 28 62 l0 88 q0 22 -22 22 l-56 0 q-22 0 -22 -22 l0 -88 q0 -40 28 -62z" fill="url(#cer)"/>
+<rect x="182" y="96" width="36" height="34" rx="8" fill="#0b4b83"/>
+<path d="M156 224 q44 -14 88 0 l0 66 q-44 14 -88 0z" fill="#eef4f9"/>
+<ellipse cx="180" cy="252" rx="12" ry="10" fill="#5f8034"/><ellipse cx="212" cy="264" rx="12" ry="10" fill="#5f8034"/><path d="M192 244 q14 -16 26 -6" stroke="#0b4b83" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+</svg>

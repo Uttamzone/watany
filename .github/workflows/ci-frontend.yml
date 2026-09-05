@@ -1,0 +1,33 @@
+name: CI frontend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'watani-b2c-website/**'
+      - '.github/workflows/ci-frontend.yml'
+  pull_request:
+    paths:
+      - 'watani-b2c-website/**'
+      - '.github/workflows/ci-frontend.yml'
+
+jobs:
+  build-and-lint:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: watani-b2c-website
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: watani-b2c-website/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:8080

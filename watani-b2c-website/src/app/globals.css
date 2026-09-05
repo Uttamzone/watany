@@ -1,0 +1,832 @@
+@import "tailwindcss";
+
+/*
+ * Watani & Sons design tokens - design.md §4.
+ * Declaring them inside @theme both registers the Tailwind utilities
+ * (bg-canvas, text-teal-950, rounded-lg…) and emits the CSS custom
+ * properties on :root, so plain CSS can read them too.
+ */
+@theme {
+    --color-teal-950: #003b38;
+    --color-teal-900: #004f4b;
+    --color-teal-800: #075b56;
+    --color-lime-500: #a9eb5a;
+    --color-lime-400: #b7f36a;
+    --color-canvas: #f3f6f4;
+    --color-warm-canvas: #fffaf0;
+    --color-surface: #ffffff;
+    --color-soft-control: #f1f5eb;
+    --color-text: #062f2d;
+    --color-muted: #7d8380;
+    --color-coral: #df665b;
+    --color-gold: #f3bb36;
+    --color-navy: #0b4b83;
+    --color-burgundy: #761047;
+    --color-rust: #b8401d;
+    --color-purple: #66246d;
+
+    --radius-sm: 10px;
+    --radius-md: 16px;
+    --radius-lg: 24px;
+    --radius-xl: 32px;
+
+    --shadow-card: 0 8px 24px rgba(0, 48, 45, 0.045);
+    --shadow-card-hover: 0 14px 32px rgba(0, 48, 45, 0.09);
+    --shadow-header: 0 8px 24px rgba(0, 40, 38, 0.08);
+
+    --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+
+    /* Crossfade used when a control swaps between two states. */
+    --animate-fade-in: fade-in 160ms ease-out;
+
+    @keyframes fade-in {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+}
+
+:root {
+    --content-width: 1228px;
+}
+
+/*
+ * The reference is a single bright theme. We deliberately do not follow the OS
+ * dark preference - an inverted palette would break the warm-canvas/teal
+ * composition the design calls for.
+ */
+body {
+    background: var(--color-canvas);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * No page ever scrolls sideways. The storefront is built from full-bleed rails
+ * that deliberately overhang `.shell` with negative margins, so a single
+ * mismatched value (or a long unbreakable string) would otherwise widen the
+ * document and drag the whole site horizontally on a phone.
+ *
+ * `overflow-x: clip` rather than `hidden`: `hidden` on html/body makes the
+ * element a scroll container, which silently breaks `position: sticky`
+ * descendants - the site header and the category filter bar both rely on it.
+ * `clip` cuts the overflow without creating that scroll container.
+ */
+html,
+body {
+    max-width: 100%;
+    overflow-x: clip;
+}
+
+h1,
+h2,
+h3,
+h4 {
+    letter-spacing: -0.02em;
+}
+
+/*
+ * Search field - hairline at rest, soft lime halo on focus. Written as plain
+ * CSS because the multi-layer, comma-separated shadow cannot be expressed as a
+ * Tailwind @theme shadow token or arbitrary value (commas split the value).
+ */
+.search-field {
+    box-shadow: inset 0 0 0 1px rgba(0, 59, 56, 0.08);
+    transition: box-shadow 200ms ease;
+}
+
+.search-field:focus-within {
+    box-shadow: inset 0 0 0 1.5px var(--color-lime-500),
+    0 0 0 4px rgba(169, 235, 90, 0.25);
+}
+
+/* The inner control never draws its own ring - that was the dark inset border. */
+.search-field input {
+    outline: none;
+    border: none;
+    box-shadow: none;
+    background: transparent;
+}
+
+.search-field:focus-within .search-icon {
+    color: var(--color-teal-950);
+}
+
+/* Type-ahead dropdown, anchored to the full width of the search field. */
+.search-panel {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    z-index: 50;
+    overflow: hidden;
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-card-hover);
+    animation: fade-in 160ms ease-out;
+}
+
+/* Centered page container - design.md §5. */
+.shell {
+    width: 100%;
+    max-width: var(--content-width);
+    margin-inline: auto;
+    padding-inline: 24px;
+}
+
+@media (min-width: 1200px) {
+    .shell {
+        padding-inline: 32px;
+    }
+}
+
+@media (max-width: 639px) {
+    .shell {
+        padding-inline: 16px;
+    }
+}
+
+/* Visible focus ring on every interactive element - design.md §14. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-teal-900);
+    outline-offset: 2px;
+    border-radius: 6px;
+}
+
+/* Horizontal rails that scroll on narrow screens without a visible scrollbar. */
+.rail-scroll {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.rail-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+/* Category cards use fixed widths in the swipe rail and release them in the
+ * six-column desktop grid. Keeping this in CSS avoids competing min-width
+ * variants when Tailwind orders standard and arbitrary breakpoints. */
+.category-rail-item {
+    width: 226px;
+}
+
+.category-rail-see-all {
+    width: 132px;
+}
+
+@media (min-width: 640px) {
+    .category-rail-item {
+        width: 240px;
+    }
+
+    .category-rail-see-all {
+        width: 132px;
+    }
+}
+
+@media (min-width: 1200px) {
+    .category-rail-item,
+    .category-rail-see-all {
+        width: auto;
+    }
+}
+
+/* Home product rails: fixed card width while swiping so the next card peeks past
+ * the edge, released to `auto` once the layout becomes the shared grid at 900px.
+ * Same rationale as .category-rail-item — kept out of Tailwind to avoid competing
+ * width variants across standard and arbitrary breakpoints. */
+.product-rail-item {
+  width: 158px;
+}
+
+@media (min-width: 400px) {
+  .product-rail-item {
+    width: 168px;
+  }
+}
+
+@media (min-width: 640px) {
+  .product-rail-item {
+    width: 190px;
+  }
+}
+
+@media (min-width: 900px) {
+  .product-rail-item {
+    width: auto;
+  }
+}
+
+/* The generated category photography has a warm studio backdrop. Fade that
+ * backdrop out before it reaches the image bounds so it dissolves into the
+ * white card instead of reading as a separate square thumbnail. */
+.category-photo {
+    -webkit-mask-image: radial-gradient(
+            ellipse at center,
+            #000 42%,
+            rgba(0, 0, 0, 0.96) 56%,
+            rgba(0, 0, 0, 0.55) 70%,
+            transparent 88%
+    );
+    mask-image: radial-gradient(
+            ellipse at center,
+            #000 42%,
+            rgba(0, 0, 0, 0.96) 56%,
+            rgba(0, 0, 0, 0.55) 70%,
+            transparent 88%
+    );
+}
+
+/*
+ * Admin-authored rich text (product Description and Shipping tabs).
+ *
+ * The markup arrives without classes - `sanitizeRichText` strips every
+ * attribute - so typography has to be applied from the element names here.
+ * The tag set matches that sanitiser's allowlist.
+ */
+.rich-text > *:first-child {
+    margin-top: 0;
+}
+
+.rich-text > *:last-child {
+    margin-bottom: 0;
+}
+
+.rich-text p {
+    margin-block: 0 1em;
+    font-size: 15px;
+    line-height: 1.75;
+    color: var(--color-muted);
+}
+
+.rich-text h2,
+.rich-text h3,
+.rich-text h4 {
+    margin-block: 1.75em 0.6em;
+    font-weight: 800;
+    color: var(--color-teal-950);
+}
+
+.rich-text h2 {
+    font-size: 23px;
+}
+
+.rich-text h3 {
+    font-size: 20px;
+}
+
+.rich-text h4 {
+    font-size: 17px;
+}
+
+.rich-text strong,
+.rich-text b {
+    font-weight: 700;
+    color: var(--color-teal-950);
+}
+
+.rich-text ul,
+.rich-text ol {
+    margin-block: 0 1em;
+    padding-inline-start: 1.25em;
+    font-size: 15px;
+    line-height: 1.75;
+    color: var(--color-muted);
+}
+
+.rich-text ul {
+    list-style: disc;
+}
+
+.rich-text ol {
+    list-style: decimal;
+}
+
+.rich-text li {
+    margin-block: 0.35em;
+}
+
+.rich-text li::marker {
+    color: var(--color-lime-500);
+}
+
+.rich-text blockquote {
+    margin-block: 0 1em;
+    padding-inline-start: 1em;
+    border-inline-start: 3px solid var(--color-lime-500);
+    font-style: italic;
+    color: var(--color-muted);
+}
+
+/*
+ * Admin portal: one flat corner radius.
+ *
+ * The back office is a dense data tool, not the storefront, so it drops the
+ * brand's soft radii for a single tight 8px on every surface - cards, panels,
+ * inputs and buttons alike. Scoped to `.admin-root` (set on the admin layout's
+ * body) rather than applied by editing ~110 utility classes across the admin
+ * tree: new admin markup then inherits the rule automatically instead of
+ * reintroducing the storefront's larger corners.
+ *
+ * `rounded-full` is deliberately exempt - status pills, badges and avatars are
+ * meant to be capsules, and flattening them reads as a rendering fault.
+ */
+.admin-root {
+    --admin-radius: 8px;
+}
+
+.admin-root :where(.rounded-sm, .rounded, .rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl),
+.admin-root :where(.rounded-t-xl, .rounded-b-xl, .rounded-t-lg, .rounded-b-lg, .rounded-t-2xl, .rounded-b-2xl) {
+    border-radius: var(--admin-radius);
+}
+
+/* Inputs and other form controls, including any the utilities above miss. */
+.admin-root :where(input, textarea, select, button, [contenteditable]) {
+    border-radius: var(--admin-radius);
+}
+
+.admin-root :where(.rounded-full) {
+    border-radius: 9999px;
+}
+
+/*
+ * The global focus ring rounds its corners to 6px, which would otherwise
+ * disagree with the admin radius for as long as a control is focused.
+ */
+.admin-root :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    border-radius: var(--admin-radius);
+}
+
+.admin-root :where(.rounded-full):focus-visible {
+    border-radius: 9999px;
+}
+
+/* Admin dashboard surface: a calm, editorial overview inside the denser shell. */
+.dashboard-surface {
+    min-height: calc(100vh - 64px);
+    padding: 16px 28px 24px;
+    border-radius: 26px;
+    background: #ffffff;
+    box-shadow: none;
+}
+
+.dashboard-heading {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin: 0 0 16px;
+}
+
+.dashboard-mark {
+    display: grid;
+    width: 48px;
+    height: 48px;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: 50%;
+    background: #f0f5e8;
+    color: #4b7e17;
+}
+
+.dashboard-mark svg {
+    width: 23px;
+    height: 23px;
+    stroke-width: 1.7;
+}
+
+.dashboard-heading h1 {
+    margin: 0;
+    color: var(--color-teal-950);
+    font-size: clamp(25px, 2.3vw, 31px);
+    line-height: 1;
+    font-weight: 800;
+}
+
+.dashboard-heading p {
+    margin: 5px 0 0;
+    color: #59606c;
+    font-size: 12px;
+}
+
+.dashboard-primary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+}
+
+/*
+ * "3D" card treatment: a tight contact shadow plus a soft, wide ambient
+ * shadow underneath it (two-shadow stack reads as depth, not just blur), a
+ * hairline border for a crisp raised edge, and a faint inset top highlight
+ * to suggest a lit top surface. Hover lifts the card and swaps in a deeper,
+ * longer-throw shadow pair - kept to flat colors/shadows only, no gradients
+ * on the surface itself, per design.md §3.
+ */
+.dashboard-metric-card, .dashboard-attention-card {
+    position: relative;
+    overflow: hidden;
+    border-radius: 14px;
+    background: #ffffff;
+    border: 1px solid rgba(0, 59, 56, 0.06);
+    box-shadow: 0 1px 1px rgba(15, 35, 32, 0.05),
+    0 3px 6px rgba(15, 35, 32, 0.05),
+    0 14px 28px -10px rgba(0, 48, 45, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    transition: transform 220ms cubic-bezier(.16, 1, .3, 1), box-shadow 220ms cubic-bezier(.16, 1, .3, 1), border-color 220ms ease;
+    will-change: transform;
+}
+
+.dashboard-metric-card:hover, .dashboard-attention-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(0, 59, 56, 0.09);
+    box-shadow: 0 2px 2px rgba(15, 35, 32, 0.06),
+    0 8px 14px rgba(15, 35, 32, 0.07),
+    0 26px 40px -14px rgba(0, 48, 45, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.dashboard-metric-card {
+    display: flex;
+    flex-direction: column;
+    min-height: 190px;
+    padding: 22px 22px 20px;
+}
+
+.dashboard-card-topline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+}
+
+.dashboard-card-topline p {
+    margin: 0;
+    color: #5c6370;
+    font-size: 13px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .01em;
+}
+
+.dashboard-metric-card .dashboard-value {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    margin-top: 0;
+}
+
+.dashboard-metric-card .dashboard-value-skeleton {
+    flex: 1;
+    height: auto;
+    margin-top: 0;
+    display: flex;
+    align-items: center;
+}
+
+.dashboard-metric-card .dashboard-value-skeleton::before {
+    content: "";
+    width: 86px;
+    height: 28px;
+    border-radius: 8px;
+    background: #eef3ec;
+    animation: dashboard-pulse 1.4s ease-in-out infinite;
+}
+
+.dashboard-metric-card .dashboard-card-meta {
+    margin-top: auto;
+}
+
+.dashboard-card-topline span {
+    display: grid;
+    width: 38px;
+    height: 38px;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: 10px;
+    box-shadow: 0 1px 2px rgba(15, 35, 32, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    transition: transform 220ms cubic-bezier(.16, 1, .3, 1);
+}
+
+.dashboard-metric-card:hover .dashboard-card-topline span,
+.dashboard-attention-card:hover .dashboard-card-topline span {
+    transform: scale(1.06);
+}
+
+.dashboard-card-topline svg {
+    width: 20px;
+    height: 20px;
+    stroke-width: 1.8;
+}
+
+.dashboard-value {
+    margin: 12px 0 0;
+    color: var(--color-teal-950);
+    font-size: clamp(24px, 2vw, 30px);
+    line-height: 1;
+    font-weight: 800;
+    letter-spacing: -.04em;
+}
+
+.dashboard-value-skeleton {
+    width: 86px;
+    height: 28px;
+    margin-top: 12px;
+    border-radius: 8px;
+    background: #eef3ec;
+    animation: dashboard-pulse 1.4s ease-in-out infinite;
+}
+
+.dashboard-card-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+    color: #59606c;
+    font-size: 11px;
+}
+
+.dashboard-live-pill {
+    padding: 2px 12px;
+    border-radius: 999px;
+    background: #eef5e7;
+    color: #477a1d;
+    font-weight: 800;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .6);
+}
+
+.dashboard-attention-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 14px;
+}
+
+.dashboard-attention-card {
+    min-height: 120px;
+    padding: 16px 18px;
+}
+
+.dashboard-attention-card .dashboard-card-topline span {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: #f0f5e8;
+    color: #4b7e17;
+}
+
+.dashboard-attention-card.is-alert .dashboard-card-topline span {
+    background: #fff0ed;
+    color: #b34e45;
+}
+
+.dashboard-attention-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    color: #59606c;
+    font-size: 12px;
+}
+
+.dashboard-attention-status span {
+    display: grid;
+    width: 28px;
+    height: 28px;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: 50%;
+    background: #eaf2df;
+    color: #4b7e17;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .6);
+}
+
+.dashboard-attention-status svg {
+    width: 21px;
+    height: 21px;
+}
+
+.dashboard-attention-card.is-alert .dashboard-attention-status span {
+    background: #fff0ed;
+    color: #b34e45;
+}
+
+.dashboard-attention-status p {
+    margin: 0;
+}
+
+.dashboard-report-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+.dashboard-report-heading h2 {
+    margin: 0;
+    color: var(--color-teal-950);
+    font-size: 19px;
+    font-weight: 800;
+}
+
+.dashboard-range-control {
+    display: flex;
+    gap: 2px;
+    overflow: auto;
+    padding: 4px;
+    border: 1px solid rgba(0, 59, 56, .08);
+    border-radius: 12px;
+    background: #fff;
+}
+
+.dashboard-range-control button {
+    border-radius: 8px;
+    white-space: nowrap;
+}
+
+.dashboard-report-panel {
+    margin-top: 16px;
+    padding: 24px;
+    border: 1px solid rgba(0, 59, 56, .08);
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 9px 24px rgba(0, 48, 45, .04);
+}
+
+.dashboard-table-panel {
+    margin-top: 16px;
+    overflow: hidden;
+    border: 1px solid rgba(0, 59, 56, .08);
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 9px 24px rgba(0, 48, 45, .04);
+}
+
+@keyframes dashboard-pulse {
+    0%, 100% {
+        opacity: .55;
+    }
+    50% {
+        opacity: 1;
+    }
+}
+
+@media (max-width: 1100px) {
+    .dashboard-surface {
+        padding-inline: 28px;
+    }
+
+    .dashboard-primary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 640px) {
+    .dashboard-surface {
+        min-height: 0;
+        padding: 28px 16px 40px;
+        border-radius: 18px;
+    }
+
+    .dashboard-heading {
+        gap: 16px;
+        margin-bottom: 30px;
+    }
+
+    .dashboard-mark {
+        width: 64px;
+        height: 64px;
+    }
+
+    .dashboard-mark svg {
+        width: 30px;
+        height: 30px;
+    }
+
+    .dashboard-heading p {
+        margin-top: 8px;
+        font-size: 14px;
+    }
+
+    .dashboard-primary-grid, .dashboard-attention-grid {
+        grid-template-columns: 1fr;
+        gap: 14px;
+    }
+
+    .dashboard-metric-card {
+        min-height: 200px;
+        padding: 18px 16px;
+    }
+
+    .dashboard-attention-grid {
+        margin-top: 14px;
+    }
+
+    .dashboard-attention-card {
+        min-height: 140px;
+        padding: 18px 16px;
+    }
+
+    .dashboard-report-heading {
+        align-items: flex-start;
+        margin-top: 34px;
+    }
+
+    .dashboard-range-control {
+        max-width: 100%;
+    }
+}
+
+/*
+ * Admin WYSIWYG surface (components/admin/rich-text-editor.tsx).
+ *
+ * Layered on top of `.rich-text` so the editor previews the real storefront
+ * typography while typing. Only the differences an editing context needs are
+ * restated: body copy at full contrast (muted grey is right for a product page,
+ * too faint to author in) and tighter leading between blocks so a long
+ * description stays scannable in a fixed-height box.
+ */
+.admin-editor {
+    max-height: 26rem;
+    overflow-y: auto;
+}
+
+.admin-editor p,
+.admin-editor ul,
+.admin-editor ol {
+    margin-block: 0 0.75em;
+    color: var(--color-text);
+}
+
+.admin-editor h2,
+.admin-editor h3,
+.admin-editor h4 {
+    margin-block: 1em 0.4em;
+}
+
+.admin-editor blockquote {
+    color: var(--color-text);
+}
+
+/*
+ * Performant Scroll Reveal & Interactive Hover Motion Language
+ * Pure CSS transform/opacity transitions driven by IntersectionObserver.
+ */
+.scroll-reveal-item {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 500ms cubic-bezier(0.16, 1, 0.3, 1), transform 500ms cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: opacity, transform;
+}
+
+.scroll-reveal-item.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Product Card Hover: subtle scale 1.0 -> 1.03 with soft shadow increase over 220ms ease-in-out */
+.product-card-hover {
+    transition: transform 220ms ease-in-out, box-shadow 220ms ease-in-out;
+    will-change: transform, box-shadow;
+}
+
+.product-card-hover:hover {
+    transform: scale(1.03);
+    box-shadow: var(--shadow-card-hover);
+}
+
+/* CTA Buttons: smooth 150ms background/color transitions without scaling */
+.btn-cta {
+    transition: background-color 150ms ease-in-out, color 150ms ease-in-out, border-color 150ms ease-in-out, opacity 150ms ease-in-out;
+}
+
+/*
+ * design.md §11 / §16: strip transforms, parallax and auto-scroll when the
+ * user asks for reduced motion. Framer Motion respects this via useReducedMotion;
+ * this block covers plain CSS transitions.
+ */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    .scroll-reveal-item {
+        opacity: 1 !important;
+        transform: none !important;
+        transition: none !important;
+    }
+
+    .product-card-hover:hover {
+        transform: none !important;
+    }
+}

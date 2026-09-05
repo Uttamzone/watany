@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="customer avatar" width="96" height="96">
+<title>customer avatar</title>
+
+<circle cx="48" cy="48" r="48" fill="#e7efdc"/>
+<circle cx="48" cy="38" r="17" fill="#00504c"/>
+<path d="M16 88 q10 -26 32 -26 q22 0 32 26z" fill="#00504c"/>
+
+</svg>

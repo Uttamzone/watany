@@ -1,0 +1,22 @@
+{
+  "name": "watani-b2c-service",
+  "version": "1.0.0",
+  "description": "Node.js Express PostgreSQL backend service for Watani B2C Shopping Platform",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "pg": "^8.13.1",
+    "pg-mem": "^3.0.14",
+    "stripe": "^22.6.1"
+  }
+}

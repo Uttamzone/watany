@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 40" role="img" aria-label="accepted payment methods" width="240" height="40">
+<title>accepted payment methods</title>
+
+<g font-family="Manrope,Arial,sans-serif" font-weight="800" font-size="11">
+<rect x="0" y="6" width="52" height="30" rx="6" fill="#ffffff" stroke="#e4ded0"/><text x="26" y="25" text-anchor="middle" fill="#1a1f71">VISA</text>
+<rect x="60" y="6" width="52" height="30" rx="6" fill="#ffffff" stroke="#e4ded0"/><circle cx="80" cy="21" r="8" fill="#eb001b" opacity=".85"/><circle cx="92" cy="21" r="8" fill="#f79e1b" opacity=".85"/>
+<rect x="120" y="6" width="52" height="30" rx="6" fill="#ffffff" stroke="#e4ded0"/><text x="146" y="25" text-anchor="middle" fill="#016fd0">AMEX</text>
+<rect x="180" y="6" width="60" height="30" rx="6" fill="#ffffff" stroke="#e4ded0"/><text x="210" y="25" text-anchor="middle" fill="#00504c">e-Transfer</text>
+</g>
+
+</svg>

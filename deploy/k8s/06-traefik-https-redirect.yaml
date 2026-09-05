@@ -1,0 +1,17 @@
+# k3s HelmChartConfig override for bundled Traefik: redirects :80 -> :443
+# cluster-wide. Added only after the HTTP-01 challenge succeeded (it needs plain HTTP).
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    ports:
+      web:
+        http:
+          redirections:
+            entryPoint:
+              to: websecure
+              scheme: https
+              permanent: true

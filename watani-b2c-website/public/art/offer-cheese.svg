@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="offer" width="160" height="160">
+<title>offer</title>
+
+<path d="M48 52 l64 0 l-7 76 q0 10 -11 10 l-28 0 q-11 0 -11 -10z" fill="#f4f7f2" stroke="#cfd8ca" stroke-width="2"/>
+<rect x="44" y="38" width="72" height="18" rx="6" fill="#e8ede6" stroke="#c3ccbf" stroke-width="2"/>
+<rect x="64" y="72" width="32" height="32" rx="6" fill="#00504c"/>
+</svg>

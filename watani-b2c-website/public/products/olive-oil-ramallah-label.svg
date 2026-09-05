@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-label="olive oil ramallah label" width="400" height="400">
+<title>olive oil ramallah label</title>
+<defs>
+<linearGradient id="oil" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfa227"/><stop offset="1" stop-color="#9c7414"/></linearGradient>
+<linearGradient id="tin" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#d8b34a"/><stop offset=".45" stop-color="#f0d47f"/><stop offset="1" stop-color="#b8912f"/></linearGradient>
+<linearGradient id="glass" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#4a6a35"/><stop offset=".45" stop-color="#7ea354"/><stop offset="1" stop-color="#3d5a2b"/></linearGradient>
+<linearGradient id="pail" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#e4e9e2"/><stop offset=".45" stop-color="#ffffff"/><stop offset="1" stop-color="#d3dad0"/></linearGradient>
+<linearGradient id="pouch" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#4d7c2f"/><stop offset=".45" stop-color="#74a84a"/><stop offset="1" stop-color="#416b27"/></linearGradient>
+<linearGradient id="jar" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#9fc27a" stop-opacity=".85"/><stop offset=".45" stop-color="#cfe3b4" stop-opacity=".9"/><stop offset="1" stop-color="#8fb06b" stop-opacity=".85"/></linearGradient>
+<linearGradient id="cer" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#e8eef3"/><stop offset=".45" stop-color="#ffffff"/><stop offset="1" stop-color="#dde6ee"/></linearGradient>
+<radialGradient id="shadow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#00302d" stop-opacity=".18"/><stop offset="1" stop-color="#00302d" stop-opacity="0"/></radialGradient>
+</defs>
+<ellipse cx="200" cy="352" rx="118" ry="20" fill="url(#shadow)"/>
+<rect x="104" y="128" width="192" height="184" rx="16" fill="#fffaf0" stroke="#d9cfae" stroke-width="2"/><rect x="104" y="128" width="192" height="42" rx="16" fill="#00504c"/><text x="200" y="156" text-anchor="middle" font-family="Manrope,Arial,sans-serif" font-size="18" font-weight="800" fill="#ffffff">RAMALLAH</text><circle cx="200" cy="226" r="38" fill="none" stroke="#00504c" stroke-width="3"/><path d="M180 234 q20 -32 42 -13 q-19 26 -42 13z" fill="#6f9a3f"/><text x="200" y="292" text-anchor="middle" font-family="Manrope,Arial,sans-serif" font-size="12" font-weight="700" fill="#00504c">EXTRA VIRGIN · 750ML</text>
+</svg>

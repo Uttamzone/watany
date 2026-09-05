@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "watani-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "watani-b2c-website", "run", "dev"],
+      "port": 3000,
+      "autoPort": true
+    },
+    {
+      "name": "watani-backend",
+      "runtimeExecutable": "./mvnw",
+      "runtimeArgs": ["spring-boot:run"],
+      "cwd": "watani-b2c-service",
+      "port": 8080
+    }
+  ]
+}

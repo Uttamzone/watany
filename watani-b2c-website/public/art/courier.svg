@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" role="img" aria-label="delivery courier with groceries" width="300" height="300">
+<title>delivery courier with groceries</title>
+
+<circle cx="150" cy="150" r="132" fill="#8c2059" opacity=".55"/>
+<rect x="96" y="126" width="108" height="96" rx="10" fill="#d9bd86"/>
+<path d="M96 126 l108 0 l0 16 l-108 0z" fill="#c2a468"/>
+<rect x="138" y="126" width="24" height="96" fill="#b2924f" opacity=".5"/>
+<circle cx="150" cy="80" r="34" fill="#f0c9a8"/>
+<path d="M116 78 q34 -44 68 0 q-6 -34 -34 -34 q-28 0 -34 34z" fill="#3a2b22"/>
+<rect x="120" y="112" width="60" height="22" rx="8" fill="#00504c"/>
+<path d="M96 222 l24 56 M204 222 l-24 56" stroke="#00403d" stroke-width="14" stroke-linecap="round"/>
+
+</svg>

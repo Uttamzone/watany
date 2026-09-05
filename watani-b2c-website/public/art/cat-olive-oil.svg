@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="category" width="120" height="120">
+<title>category</title>
+
+<rect x="42" y="30" width="40" height="66" rx="7" fill="#e2bd5c" stroke="#b8912f" stroke-width="2"/>
+<rect x="54" y="16" width="16" height="16" rx="4" fill="#00504c"/>
+<rect x="50" y="48" width="24" height="34" rx="4" fill="#fffaf0"/>
+<path d="M54 70 q8 -12 16 -5 q-7 10 -16 5z" fill="#6f9a3f"/>
+</svg>

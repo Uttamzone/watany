@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="category" width="120" height="120">
+<title>category</title>
+
+<path d="M40 40 l42 0 l0 54 q0 7 -7 7 l-28 0 q-7 0 -7 -7z" fill="#c9a95f"/>
+<path d="M40 40 l42 0 l-4 -10 l-34 0z" fill="#a8905f"/>
+<ellipse cx="50" cy="62" rx="5" ry="3.4" fill="#fffaf0" opacity=".85"/><ellipse cx="62" cy="62" rx="5" ry="3.4" fill="#fffaf0" opacity=".85"/><ellipse cx="74" cy="62" rx="5" ry="3.4" fill="#fffaf0" opacity=".85"/><ellipse cx="50" cy="78" rx="5" ry="3.4" fill="#fffaf0" opacity=".85"/><ellipse cx="62" cy="78" rx="5" ry="3.4" fill="#fffaf0" opacity=".85"/><ellipse cx="74" cy="78" rx="5" ry="3.4" fill="#fffaf0" opacity=".85"/>
+</svg>

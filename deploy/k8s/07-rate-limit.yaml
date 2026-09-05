@@ -1,0 +1,10 @@
+# Per-source-IP flood/abuse protection at the edge, ahead of both services.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: watani-rate-limit
+  namespace: watani
+spec:
+  rateLimit:
+    average: 50
+    burst: 100
