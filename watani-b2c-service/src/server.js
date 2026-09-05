@@ -117,18 +117,20 @@ app.get(['/actuator/health', '/health', '/api/health'], (req, res) => {
 });
 
 async function start() {
-    try {
-        await db.initDatabase();
-    } catch (e) {
-        console.error('[Database init error]:', e);
-    }
-    app.listen(PORT, '0.0.0.0', () => {
+    // Start listening immediately so Kubernetes startup & readiness probes pass without delay
+    const server = app.listen(PORT, '0.0.0.0', () => {
         console.log(`========================================`);
         console.log(`Watani Express Backend running on port ${PORT}`);
         console.log(`Health check: http://localhost:${PORT}/api/health`);
         console.log(`Stripe Webhook: http://localhost:${PORT}/api/webhooks/payment`);
         console.log(`========================================`);
     });
+
+    try {
+        await db.initDatabase();
+    } catch (e) {
+        console.error('[Database init error]:', e);
+    }
 }
 
 start();
