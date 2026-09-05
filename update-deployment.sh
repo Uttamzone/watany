@@ -26,8 +26,27 @@ rm -f website.tar
 echo "=================================================="
 echo " 4. Applying Manifests (/api/health Probe)"
 echo "=================================================="
+# Preserve any existing Stripe key from .env.stripe or running cluster before applying config
+SAVED_STRIPE_KEY=""
+if [ -f ".env.stripe" ]; then
+    SAVED_STRIPE_KEY=$(grep -E '^STRIPE_SECRET_KEY=' .env.stripe 2>/dev/null | cut -d '=' -f2- | tr -d '"' | tr -d "'" | tr -d '[:space:]')
+fi
+if [ -z "$SAVED_STRIPE_KEY" ]; then
+    EXISTING_KEY=$(sudo k3s kubectl get configmap watani-backend-config -n watani -o jsonpath='{.data.STRIPE_SECRET_KEY}' 2>/dev/null || true)
+    if [ -n "$EXISTING_KEY" ] && [[ "$EXISTING_KEY" != *"YOUR_STRIPE"* ]]; then
+        SAVED_STRIPE_KEY="$EXISTING_KEY"
+    fi
+fi
+
 sudo k3s kubectl apply -f deploy/k8s/00-namespace.yaml
 sudo k3s kubectl apply -f deploy/k8s/01-backend-config.yaml
+
+if [ -n "$SAVED_STRIPE_KEY" ]; then
+    echo "Restoring configured Stripe key into watani-backend-config..."
+    sudo k3s kubectl patch configmap watani-backend-config -n watani --type merge \
+        -p "{\"data\":{\"STRIPE_SECRET_KEY\":\"$SAVED_STRIPE_KEY\",\"STRIPE_API_KEY\":\"$SAVED_STRIPE_KEY\"}}"
+fi
+
 sudo k3s kubectl apply -f deploy/k8s/02-backend.yaml
 sudo k3s kubectl apply -f deploy/k8s/03-frontend.yaml
 sudo k3s kubectl apply -f deploy/k8s/04-ingress.yaml
