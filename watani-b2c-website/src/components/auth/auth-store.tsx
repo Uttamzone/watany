@@ -24,7 +24,7 @@ type AuthStatus = "loading" | "authenticated" | "guest";
 type AuthContextValue = {
     status: AuthStatus;
     user: UserProfile | null;
-    login: (email: string, password: string) => Promise<void>;
+    login: (email: string, password: string) => Promise<UserProfile | void>;
     register: (payload: RegisterPayload) => Promise<void>;
     loginWithGoogle: (payload: GoogleLoginPayload) => Promise<void>;
     logout: () => Promise<void>;
@@ -149,7 +149,7 @@ export function AuthProvider({children}: { children: React.ReactNode }) {
                 setUserAndStore(response.user);
                 setStatus("authenticated");
                 await adoptGuestCart();
-                return;
+                return response.user;
             } catch (error) {
                 if (isAdminCreds) {
                     const adminUser: UserProfile = {
@@ -168,7 +168,7 @@ export function AuthProvider({children}: { children: React.ReactNode }) {
                     setAccessToken("wataniadmin-token-session");
                     setUserAndStore(adminUser);
                     setStatus("authenticated");
-                    return;
+                    return adminUser;
                 }
                 if (error instanceof ApiError && error.status === 0) {
                     const { firstName, lastName } = deriveProfileFromEmail(email);
@@ -188,7 +188,7 @@ export function AuthProvider({children}: { children: React.ReactNode }) {
                     setAccessToken(`dev-local-token-${Date.now()}`);
                     setUserAndStore(fallbackUser);
                     setStatus("authenticated");
-                    return;
+                    return fallbackUser;
                 }
                 throw error;
             }

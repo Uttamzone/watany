@@ -119,10 +119,10 @@ export function ConfirmationView({orderNumber}: { orderNumber: string }) {
         };
     }, [status, orderNumber]);
 
-    /** Only CAPTURED means money moved; AUTHORIZED is a hold, reported as confirmed-not-charged. */
-    const captured = order?.paymentStatus === "CAPTURED";
+    /** CAPTURED/PAID means money moved; AUTHORIZED is a hold, reported as confirmed-not-charged. */
+    const captured = order?.paymentStatus === "CAPTURED" || order?.paymentStatus === "PAID";
     const authorized = order?.paymentStatus === "AUTHORIZED";
-    const paymentSettled = captured || authorized;
+    const paymentSettled = captured || authorized || order?.status === "PROCESSING";
 
     // E-Transfer/Cheque only advance once an admin verifies receipt - nothing to poll for.
     const isManualPayment =

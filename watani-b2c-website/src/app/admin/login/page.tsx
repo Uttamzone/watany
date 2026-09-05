@@ -5,10 +5,11 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Lock, ShieldCheck, User } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-store";
+import { isAdminRole } from "@/lib/admin/permissions";
 import { useNotifications } from "@/components/notifications/notification-store";
 
 export default function AdminLoginPage() {
-  const { login } = useAuth();
+  const { login, logout } = useAuth();
   const router = useRouter();
   const notifications = useNotifications();
 
@@ -29,7 +30,16 @@ export default function AdminLoginPage() {
     setError(null);
 
     try {
-      await login(username.trim(), password);
+      const loggedInUser = await login(username.trim(), password);
+      // After login, verify the user actually has an admin role
+      const userRoles = (loggedInUser as any)?.roles ?? [];
+      if (!isAdminRole(userRoles)) {
+        // Log them out and deny access
+        try { logout(); } catch {}
+        setError("Access Denied: You do not have administrator privileges.");
+        notifications.error("Access Denied", "This portal is for administrators only.");
+        return;
+      }
       notifications.success("Welcome back", "Logged into Watani Admin Portal");
       router.push("/admin");
     } catch (err) {

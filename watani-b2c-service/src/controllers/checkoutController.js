@@ -206,6 +206,10 @@ async function createIntent(req, res) {
 
         const orderNumber = 'WAT-' + Date.now().toString(36).toUpperCase() + '-' + Math.floor(Math.random() * 1000);
 
+        const isStripe = (paymentMethod || '').toUpperCase() === 'STRIPE';
+        const initialStatus = isStripe ? 'PENDING_PAYMENT' : 'AWAITING_PAYMENT_VERIFICATION';
+        const initialPaymentStatus = 'PENDING';
+
         // Create order in PostgreSQL
         const orderInsert = await db.query(`
             INSERT INTO orders (
@@ -215,14 +219,14 @@ async function createIntent(req, res) {
                 carrier_name, shipping_method,
                 created_at, updated_at, version
             ) VALUES (
-                $1, $2, $3, 'PROCESSING', 'PAID', $4,
-                $5, $6, $7, $8, 'CAD', $9,
-                $10, $11, $12, $13, $14, $15,
-                $16, $17,
+                $1, $2, $3, $4, $5, $6,
+                $7, $8, $9, $10, 'CAD', $11,
+                $12, $13, $14, $15, $16, $17,
+                $18, $19,
                 NOW(), NOW(), 0
             ) RETURNING id;
         `, [
-            orderNumber, userId, userEmail, buyerGroup,
+            orderNumber, userId, userEmail, initialStatus, initialPaymentStatus, buyerGroup,
             subtotal, shippingTotal, taxTotal, grandTotal, paymentMethod,
             shippingAddress ? shippingAddress.fullName : 'Customer',
             shippingAddress ? shippingAddress.line1 : '300 Greenbank Rd',
@@ -256,8 +260,8 @@ async function createIntent(req, res) {
             id: orderId,
             orderNumber,
             email: userEmail,
-            status: 'PROCESSING',
-            paymentStatus: 'PAID',
+            status: initialStatus,
+            paymentStatus: initialPaymentStatus,
             paymentMethod,
             pricingGroup: buyerGroup,
             subtotal,
@@ -272,33 +276,74 @@ async function createIntent(req, res) {
         };
 
         const stripeKey = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_API_KEY;
-        const isStripe = (paymentMethod || '').toUpperCase() === 'STRIPE';
 
-        if (stripeKey && isStripe) {
+        if (isStripe) {
+            if (!stripeKey || stripeKey.includes('YOUR_STRIPE') || stripeKey.trim() === '') {
+                return res.status(400).json({
+                    error: 'Payment Configuration Error',
+                    message: 'Stripe Live Secret Key is not configured on the server. Please select an alternative payment method or contact support.'
+                });
+            }
+
             try {
                 const stripe = require('stripe')(stripeKey);
                 const domain = process.env.STOREFRONT_BASE_URL || process.env.FRONTEND_URL || 'https://wataniandsons.ca';
-                const session = await stripe.checkout.sessions.create({
-                    payment_method_types: ['card'],
-                    line_items: orderItems.map(item => ({
+                
+                const stripeLineItems = orderItems.map(item => ({
+                    price_data: {
+                        currency: 'cad',
+                        product_data: {
+                            name: item.productName,
+                        },
+                        unit_amount: Math.round(item.unitPrice * 100),
+                    },
+                    quantity: item.quantity,
+                }));
+
+                if (shippingTotal > 0) {
+                    stripeLineItems.push({
                         price_data: {
                             currency: 'cad',
                             product_data: {
-                                name: item.productName,
+                                name: `Shipping (${carrierName} - ${shippingMethod})`,
                             },
-                            unit_amount: Math.round(item.unitPrice * 100),
+                            unit_amount: Math.round(shippingTotal * 100),
                         },
-                        quantity: item.quantity,
-                    })),
+                        quantity: 1,
+                    });
+                }
+
+                if (taxTotal > 0) {
+                    stripeLineItems.push({
+                        price_data: {
+                            currency: 'cad',
+                            product_data: {
+                                name: `Estimated Sales Tax (${region})`,
+                            },
+                            unit_amount: Math.round(taxTotal * 100),
+                        },
+                        quantity: 1,
+                    });
+                }
+
+                const session = await stripe.checkout.sessions.create({
+                    payment_method_types: ['card'],
+                    line_items: stripeLineItems,
                     mode: 'payment',
                     success_url: `${domain}/checkout/confirmation?order=${encodeURIComponent(orderNumber)}`,
                     cancel_url: `${domain}/checkout`,
                     client_reference_id: orderNumber,
+                    customer_email: userEmail && userEmail.includes('@') && !userEmail.includes('.local') ? userEmail : undefined,
                     metadata: {
                         orderNumber,
                         userEmail,
                     },
                 });
+
+                await db.query(
+                    `UPDATE orders SET payment_provider_ref = $1 WHERE id = $2;`,
+                    [session.id, orderId]
+                );
 
                 return res.json({
                     orderNumber,
@@ -309,15 +354,19 @@ async function createIntent(req, res) {
                 });
             } catch (stripeErr) {
                 console.error('[Stripe Session Error]:', stripeErr);
+                return res.status(400).json({
+                    error: 'Stripe Checkout Error',
+                    message: stripeErr.message || 'Failed to initiate Stripe Checkout session. Please try again.'
+                });
             }
         }
 
         return res.json({
             orderNumber,
-            clientSecret: 'pi_stub_' + Math.random().toString(36).substring(2),
             orderId,
             grandTotal,
             currency: 'CAD',
+            paymentMethod,
             order: orderObj
         });
     } catch (err) {

@@ -189,6 +189,9 @@ export async function listMyOrders(page = 0, size = 20): Promise<OrderResponse[]
                             return {
                                 ...apiItem,
                                 ...local,
+                                // Prefer API items/shippingAddress over local (stale) data
+                                items: (apiItem.items && apiItem.items.length > 0) ? apiItem.items : (local.items || []),
+                                shippingAddress: apiItem.shippingAddress || local.shippingAddress,
                                 status: local.status || apiItem.status,
                                 paymentStatus: local.paymentStatus || apiItem.paymentStatus,
                             };
@@ -234,6 +237,9 @@ export async function getMyOrder(orderNumber: string): Promise<OrderResponse> {
                         return {
                             ...apiOrder,
                             ...local,
+                            // Prefer API items/shippingAddress over stale local data
+                            items: (apiOrder.items && apiOrder.items.length > 0) ? apiOrder.items : (local.items || []),
+                            shippingAddress: apiOrder.shippingAddress || local.shippingAddress,
                             status: local.status || apiOrder.status,
                             paymentStatus: local.paymentStatus || apiOrder.paymentStatus,
                         };

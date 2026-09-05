@@ -1,17 +1,34 @@
+const path = require('path');
+const fs = require('fs');
 const db = require('../db');
+
+let catalogueMap = new Map();
+try {
+    const catPath = path.join(__dirname, '../db/catalogueData.json');
+    if (fs.existsSync(catPath)) {
+        const catData = JSON.parse(fs.readFileSync(catPath, 'utf8'));
+        for (const item of catData) {
+            if (item.slug) catalogueMap.set(item.slug.toLowerCase(), item);
+            if (item.name) catalogueMap.set(item.name.toLowerCase(), item);
+        }
+    }
+} catch (e) {
+    console.warn('[adminController] Could not load catalogueData.json:', e.message);
+}
 
 /* ------------------------------------------------------------- Customers */
 
 async function listCustomers(req, res) {
     try {
-        const { search, group, status, page = 0, size = 50 } = req.query;
+        const { search, email, group, status, page = 0, size = 50 } = req.query;
         let where = [];
         let params = [];
         let pIdx = 1;
 
-        if (search) {
+        const searchTerm = (email || search || '').trim();
+        if (searchTerm) {
             where.push(`(email ILIKE $${pIdx} OR first_name ILIKE $${pIdx} OR last_name ILIKE $${pIdx} OR company_name ILIKE $${pIdx})`);
-            params.push(`%${search}%`);
+            params.push(`%${searchTerm}%`);
             pIdx++;
         }
         if (group) {
@@ -26,8 +43,8 @@ async function listCustomers(req, res) {
         }
 
         const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
-        const limit = parseInt(size, 10);
-        const offset = parseInt(page, 10) * limit;
+        const limit = parseInt(size, 10) || 50;
+        const offset = (parseInt(page, 10) || 0) * limit;
 
         const countRes = await db.query(`SELECT COUNT(*) FROM users ${whereSql}`, params);
         const totalElements = parseInt(countRes.rows[0].count, 10);
@@ -37,6 +54,7 @@ async function listCustomers(req, res) {
                    pricing_group as "pricingGroup", approval_status as "approvalStatus",
                    requested_group as "requestedGroup", company_name as "companyName",
                    tax_id as "taxId", business_licence_ref as "businessLicenceRef",
+                   COALESCE(enabled, TRUE) as enabled,
                    created_at as "createdAt"
             FROM users
             ${whereSql}
@@ -44,7 +62,122 @@ async function listCustomers(req, res) {
             LIMIT $${pIdx} OFFSET $${pIdx + 1};
         `, [...params, limit, offset]);
 
-        return res.json({ content: rows, totalElements, totalPages: Math.ceil(totalElements / limit) });
+        return res.json({ content: rows, totalElements, totalPages: Math.ceil(totalElements / limit) || 1, page: parseInt(page, 10) || 0, size: limit });
+    } catch (err) {
+        return res.status(500).json({ error: 'Internal Server Error', message: err.message });
+    }
+}
+
+async function decideApproval(req, res) {
+    try {
+        const { id } = req.params;
+        const { approve } = req.body;
+        const isApproved = approve === true || approve === 'true';
+
+        const { rows: existing } = await db.query(`SELECT requested_group FROM users WHERE id = $1;`, [id]);
+        if (existing.length === 0) return res.status(404).json({ error: 'Not Found', message: 'Customer not found' });
+
+        const requestedGroup = existing[0].requested_group || 'WHOLESALE';
+        const newGroup = isApproved ? requestedGroup : 'RETAIL';
+        const newStatus = isApproved ? 'APPROVED' : 'REJECTED';
+
+        const { rows } = await db.query(`
+            UPDATE users
+            SET pricing_group = $1, approval_status = $2, updated_at = NOW()
+            WHERE id = $3
+            RETURNING id, email, first_name as "firstName", last_name as "lastName", phone,
+                      pricing_group as "pricingGroup", approval_status as "approvalStatus",
+                      requested_group as "requestedGroup", company_name as "companyName",
+                      COALESCE(enabled, TRUE) as enabled;
+        `, [newGroup, newStatus, id]);
+
+        return res.json(rows[0]);
+    } catch (err) {
+        return res.status(500).json({ error: 'Internal Server Error', message: err.message });
+    }
+}
+
+async function assignPricingGroup(req, res) {
+    try {
+        const { id } = req.params;
+        const { pricingGroup } = req.body;
+        if (!pricingGroup) return res.status(400).json({ error: 'Bad Request', message: 'pricingGroup is required' });
+
+        const { rows } = await db.query(`
+            UPDATE users
+            SET pricing_group = $1, updated_at = NOW()
+            WHERE id = $2
+            RETURNING id, email, first_name as "firstName", last_name as "lastName", phone,
+                      pricing_group as "pricingGroup", approval_status as "approvalStatus",
+                      requested_group as "requestedGroup", company_name as "companyName",
+                      COALESCE(enabled, TRUE) as enabled;
+        `, [pricingGroup, id]);
+
+        if (rows.length === 0) return res.status(404).json({ error: 'Not Found', message: 'Customer not found' });
+        return res.json(rows[0]);
+    } catch (err) {
+        return res.status(500).json({ error: 'Internal Server Error', message: err.message });
+    }
+}
+
+async function setApprovalStatus(req, res) {
+    try {
+        const { id } = req.params;
+        const { approvalStatus } = req.body;
+        if (!approvalStatus) return res.status(400).json({ error: 'Bad Request', message: 'approvalStatus is required' });
+
+        const { rows } = await db.query(`
+            UPDATE users
+            SET approval_status = $1, updated_at = NOW()
+            WHERE id = $2
+            RETURNING id, email, first_name as "firstName", last_name as "lastName", phone,
+                      pricing_group as "pricingGroup", approval_status as "approvalStatus",
+                      requested_group as "requestedGroup", company_name as "companyName",
+                      COALESCE(enabled, TRUE) as enabled;
+        `, [approvalStatus, id]);
+
+        if (rows.length === 0) return res.status(404).json({ error: 'Not Found', message: 'Customer not found' });
+        return res.json(rows[0]);
+    } catch (err) {
+        return res.status(500).json({ error: 'Internal Server Error', message: err.message });
+    }
+}
+
+async function setCustomerEnabled(req, res) {
+    try {
+        const { id } = req.params;
+        const enabled = req.query.enabled === 'true' || req.body?.enabled === true;
+
+        const { rows } = await db.query(`
+            UPDATE users
+            SET enabled = $1, updated_at = NOW()
+            WHERE id = $2
+            RETURNING id, email, first_name as "firstName", last_name as "lastName", phone,
+                      pricing_group as "pricingGroup", approval_status as "approvalStatus",
+                      requested_group as "requestedGroup", company_name as "companyName",
+                      COALESCE(enabled, TRUE) as enabled;
+        `, [enabled, id]);
+
+        if (rows.length === 0) return res.status(404).json({ error: 'Not Found', message: 'Customer not found' });
+        return res.json(rows[0]);
+    } catch (err) {
+        return res.status(500).json({ error: 'Internal Server Error', message: err.message });
+    }
+}
+
+async function pendingApprovals(req, res) {
+    try {
+        const { rows } = await db.query(`
+            SELECT id, email, first_name as "firstName", last_name as "lastName", phone,
+                   pricing_group as "pricingGroup", approval_status as "approvalStatus",
+                   requested_group as "requestedGroup", company_name as "companyName",
+                   COALESCE(enabled, TRUE) as enabled,
+                   created_at as "createdAt"
+            FROM users
+            WHERE approval_status = 'PENDING'
+            ORDER BY created_at DESC;
+        `);
+        return res.json(rows);
     } catch (err) {
         return res.status(500).json({ error: 'Internal Server Error', message: err.message });
     }
@@ -131,6 +264,25 @@ async function listAdminProducts(req, res) {
                 displayOrder: img.displayOrder,
                 isDefault: idx === 0
             }));
+
+            // Authentic fallback if product has 0 images in DB
+            if (p.images.length === 0) {
+                const catItem = catalogueMap.get((p.slug || '').toLowerCase()) || catalogueMap.get((p.name || '').toLowerCase());
+                if (catItem && catItem.image) {
+                    p.images = [{
+                        id: p.id,
+                        url: catItem.image,
+                        altText: p.name,
+                        displayOrder: 0,
+                        isDefault: true
+                    }];
+                    db.query(
+                        `INSERT INTO product_images (product_id, url, alt_text, display_order, created_at, updated_at, version)
+                         VALUES ($1, $2, $3, 0, NOW(), NOW(), 0) ON CONFLICT DO NOTHING;`,
+                        [p.id, catItem.image, p.name]
+                    ).catch(() => {});
+                }
+            }
 
             // Variants
             const varRes = await db.query(`
@@ -535,11 +687,93 @@ async function listStaff(req, res) {
     }
 }
 
+async function getAdminProduct(req, res) {
+    try {
+        const slug = decodeURIComponent(req.params.slug);
+        const { rows: products } = await db.query(`
+            SELECT p.id, p.slug, p.name, p.full_name as "fullName",
+                   p.subtitle, p.description, p.category_id,
+                   c.slug as "categorySlug", c.name as category,
+                   p.badge, p.active, p.region, p.material, p.color
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.id
+            WHERE LOWER(p.slug) = LOWER($1) OR LOWER(p.name) = LOWER($1)
+            LIMIT 1;
+        `, [slug]);
+
+        if (products.length === 0) {
+            const catItem = catalogueMap.get(slug.toLowerCase());
+            if (catItem) {
+                return res.json({
+                    id: parseInt(catItem.id, 10) || 1,
+                    slug: catItem.slug,
+                    name: catItem.name,
+                    fullName: catItem.fullName || catItem.name,
+                    subtitle: catItem.subtitle || null,
+                    description: catItem.description || null,
+                    categorySlug: catItem.category || 'olive-oil',
+                    active: true,
+                    images: [{ id: 1, url: catItem.image, altText: catItem.name, displayOrder: 0, isDefault: true }],
+                    variants: [{
+                        id: 1,
+                        sku: catItem.sku || `SKU-${catItem.slug}`,
+                        unit: catItem.unit || '1 Unit',
+                        stockQuantity: 100,
+                        lowStockThreshold: 5,
+                        backorderAllowed: false,
+                        priceTiers: [{ id: 1, pricingGroup: 'RETAIL', unitPrice: parseFloat(`${catItem.priceMajor}.${catItem.priceMinor || '00'}`) || 25, minQuantity: 1 }]
+                    }]
+                });
+            }
+            return res.status(404).json({ error: 'Not Found', message: 'Product not found' });
+        }
+
+        const p = products[0];
+        const imgRes = await db.query(`SELECT id, url, alt_text as "altText", display_order as "displayOrder" FROM product_images WHERE product_id = $1 ORDER BY display_order ASC;`, [p.id]);
+        p.images = imgRes.rows.map((img, idx) => ({ id: img.id, url: img.url, altText: img.altText, displayOrder: img.displayOrder, isDefault: idx === 0 }));
+        if (p.images.length === 0) {
+            const catItem = catalogueMap.get((p.slug || '').toLowerCase()) || catalogueMap.get((p.name || '').toLowerCase());
+            if (catItem && catItem.image) {
+                p.images = [{ id: p.id, url: catItem.image, altText: p.name, displayOrder: 0, isDefault: true }];
+            }
+        }
+
+        const varRes = await db.query(`
+            SELECT id, sku, unit, stock_quantity as "stockQuantity", low_stock_threshold as "lowStockThreshold",
+                   backorder_allowed as "backorderAllowed", weight_grams as "weightGrams",
+                   length_cm as "lengthCm", width_cm as "widthCm", height_cm as "heightCm", active
+            FROM product_variants WHERE product_id = $1 ORDER BY id ASC;
+        `, [p.id]);
+
+        p.variants = [];
+        for (const v of varRes.rows) {
+            const tierRes = await db.query(`SELECT id, pricing_group as "pricingGroup", unit_price as "unitPrice", min_quantity as "minQuantity", compare_at_price as "compareAtPrice" FROM price_tiers WHERE variant_id = $1;`, [v.id]);
+            p.variants.push({
+                id: v.id, sku: v.sku, unit: v.unit || '1 Unit', stockQuantity: v.stockQuantity || 0,
+                lowStockThreshold: v.lowStockThreshold || 5, backorderAllowed: Boolean(v.backorderAllowed),
+                weightGrams: v.weightGrams, lengthCm: v.lengthCm, widthCm: v.widthCm, heightCm: v.heightCm, taxable: true,
+                priceTiers: tierRes.rows.map(t => ({ id: t.id, pricingGroup: t.pricingGroup, unitPrice: parseFloat(t.unitPrice) || 0, minQuantity: t.minQuantity, compareAtPrice: t.compareAtPrice ? parseFloat(t.compareAtPrice) : null }))
+            });
+        }
+
+        return res.json(p);
+    } catch (err) {
+        console.error('[getAdminProduct error]:', err);
+        return res.status(500).json({ error: 'Internal Server Error', message: err.message });
+    }
+}
+
 module.exports = {
     listCustomers,
+    decideApproval,
+    assignPricingGroup,
+    setApprovalStatus,
+    setCustomerEnabled,
+    pendingApprovals,
     approveCustomerGroup,
     rejectCustomerGroup,
     listAdminProducts,
+    getAdminProduct,
     updateStock,
     listAdminOrders,
     getAdminOrderDetail,

@@ -61,9 +61,15 @@ mapRoute('get', ['/v1/settings', '/settings'], misc.getSettings);
 
 /* Admin Routes */
 mapRoute('get', ['/v1/admin/customers', '/admin/customers'], verifyToken, requireAdmin, admin.listCustomers);
+mapRoute('get', ['/v1/admin/customers/pending-approvals', '/admin/customers/pending-approvals'], verifyToken, requireAdmin, admin.pendingApprovals);
+mapRoute('post', ['/v1/admin/customers/:id/approval', '/admin/customers/:id/approval'], verifyToken, requireAdmin, admin.decideApproval);
+mapRoute('put', ['/v1/admin/customers/:id/pricing-group', '/admin/customers/:id/pricing-group'], verifyToken, requireAdmin, admin.assignPricingGroup);
+mapRoute('put', ['/v1/admin/customers/:id/approval-status', '/admin/customers/:id/approval-status'], verifyToken, requireAdmin, admin.setApprovalStatus);
+mapRoute('put', ['/v1/admin/customers/:id/enabled', '/admin/customers/:id/enabled'], verifyToken, requireAdmin, admin.setCustomerEnabled);
 mapRoute('post', ['/v1/admin/customers/:id/approve', '/admin/customers/:id/approve'], verifyToken, requireAdmin, admin.approveCustomerGroup);
 mapRoute('post', ['/v1/admin/customers/:id/reject', '/admin/customers/:id/reject'], verifyToken, requireAdmin, admin.rejectCustomerGroup);
 mapRoute('get', ['/v1/admin/catalogue/products', '/admin/catalogue/products'], verifyToken, requireAdmin, admin.listAdminProducts);
+mapRoute('get', ['/v1/admin/catalogue/products/:slug', '/admin/catalogue/products/:slug'], verifyToken, requireAdmin, admin.getAdminProduct);
 mapRoute('put', ['/v1/admin/catalogue/variants/:sku/stock', '/admin/catalogue/variants/:sku/stock', '/v1/admin/catalogue/stock', '/admin/catalogue/stock'], verifyToken, requireAdmin, admin.updateStock);
 mapRoute('get', ['/v1/admin/orders', '/admin/orders'], verifyToken, requireAdmin, admin.listAdminOrders);
 mapRoute('get', ['/v1/admin/orders/:orderNumber', '/admin/orders/:orderNumber'], verifyToken, requireAdmin, admin.getAdminOrderDetail);

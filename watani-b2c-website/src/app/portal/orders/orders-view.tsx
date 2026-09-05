@@ -80,7 +80,7 @@ export function OrdersView() {
                                     <p className="font-bold text-teal-950">{order.orderNumber}</p>
                                     <p className="mt-0.5 text-[13px] text-muted">
                                         Placed {new Date(order.placedAt).toLocaleDateString()} ·{" "}
-                                        {order.items.length} item{order.items.length === 1 ? "" : "s"}
+                                        {(order.items?.length ?? 0)} item{(order.items?.length ?? 0) === 1 ? "" : "s"}
                                     </p>
                                 </div>
                             </div>

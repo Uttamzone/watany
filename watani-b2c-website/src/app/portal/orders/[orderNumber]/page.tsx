@@ -145,12 +145,12 @@ export default function PortalOrderDetailPage({
             <div className="mt-6 grid gap-6 lg:grid-cols-3">
                 <div className="space-y-6 lg:col-span-2">
                     <div className="rounded-2xl bg-white p-4 shadow-card sm:p-5">
-                        <h2 className="text-[15px] font-bold text-teal-950">Items ({order.items.length})</h2>
+                        <h2 className="text-[15px] font-bold text-teal-950">Items ({order.items?.length ?? 0})</h2>
                         {/* Below sm the qty/price move under the product name - kept on one
                 row they leave the name barely any width, and a truncated
                 product name is the least useful thing to drop. */}
                         <ul className="mt-3 divide-y divide-black/5">
-                            {order.items.map((line, idx) => (
+                            {(order.items ?? []).map((line, idx) => (
                                 <li key={line.id ? `${line.id}-${idx}` : `${line.sku || "item"}-${idx}`} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
                                     <div className="relative size-14 shrink-0 overflow-hidden rounded-xl bg-canvas border border-black/5">
                                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -239,11 +239,11 @@ export default function PortalOrderDetailPage({
                             <h2 className="text-[15px] font-bold text-teal-950">Shipping Address</h2>
                         </div>
                         <p className="mt-2 text-[13px] leading-relaxed text-teal-950">
-                            {order.shippingAddress.fullName}<br/>
-                            {order.shippingAddress.line1}
-                            {order.shippingAddress.line2 && <>, {order.shippingAddress.line2}</>}<br/>
-                            {order.shippingAddress.city}, {order.shippingAddress.region} {order.shippingAddress.postalCode}<br/>
-                            {order.shippingAddress.country}
+                            {order.shippingAddress?.fullName}<br/>
+                            {order.shippingAddress?.line1}
+                            {order.shippingAddress?.line2 && <>, {order.shippingAddress.line2}</>}<br/>
+                            {order.shippingAddress?.city}, {order.shippingAddress?.region} {order.shippingAddress?.postalCode}<br/>
+                            {order.shippingAddress?.country ?? "Canada"}
                         </p>
                     </div>
 

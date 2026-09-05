@@ -68,18 +68,46 @@ async function seedLiveCatalogue(queryFn) {
         }
     } catch (e) {}
 
-    // Read catalogue.ts products dataset
-    const cataloguePath = path.join(__dirname, '../../../watani-b2c-website/src/lib/catalogue.ts');
-    let productsData = [];
+    // Ensure standard roles exist in DB
+    const standardRoles = [
+        { id: 1, name: 'SUPER_ADMIN', description: 'Full administrative access' },
+        { id: 2, name: 'CATALOGUE_MANAGER', description: 'Manage products and pricing' },
+        { id: 3, name: 'ORDER_MANAGER', description: 'Manage customer orders and shipping' },
+        { id: 4, name: 'SUPPORT', description: 'Customer support agent' },
+        { id: 5, name: 'RETAIL_CUSTOMER', description: 'Standard consumer' },
+    ];
+    for (const r of standardRoles) {
+        try {
+            await queryFn(`
+                INSERT INTO roles (id, name, description, created_at, updated_at, version)
+                VALUES ($1, $2, $3, NOW(), NOW(), 0)
+                ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description;
+            `, [r.id, r.name, r.description]);
+        } catch (e) {}
+    }
 
-    if (fs.existsSync(cataloguePath)) {
-        const content = fs.readFileSync(cataloguePath, 'utf8');
-        const match = content.match(/export const products: Product\[\] = (\[[\s\S]*?\]);/);
-        if (match) {
-            try {
-                productsData = JSON.parse(match[1]);
-            } catch (e) {
-                console.error('[Seeder Error] Failed to parse catalogue.ts JSON:', e.message);
+    // Read catalogueData.json products dataset
+    let productsData = [];
+    const localDataPath = path.join(__dirname, 'catalogueData.json');
+    if (fs.existsSync(localDataPath)) {
+        try {
+            productsData = JSON.parse(fs.readFileSync(localDataPath, 'utf8'));
+        } catch (e) {
+            console.error('[Seeder Error] Failed to parse local catalogueData.json:', e.message);
+        }
+    }
+
+    if (productsData.length === 0) {
+        const cataloguePath = path.join(__dirname, '../../../watani-b2c-website/src/lib/catalogue.ts');
+        if (fs.existsSync(cataloguePath)) {
+            const content = fs.readFileSync(cataloguePath, 'utf8');
+            const match = content.match(/export const products: Product\[\] = (\[[\s\S]*?\]);/);
+            if (match) {
+                try {
+                    productsData = JSON.parse(match[1]);
+                } catch (e) {
+                    console.error('[Seeder Error] Failed to parse catalogue.ts JSON:', e.message);
+                }
             }
         }
     }
@@ -93,11 +121,22 @@ async function seedLiveCatalogue(queryFn) {
             const catId = categoryMap.get(p.category) || categoryMap.get('olive-oil') || 1;
             const price = parseFloat(`${p.priceMajor || '0'}.${p.priceMinor || '00'}`) || 25.00;
 
-            const existingP = await queryFn(`SELECT id FROM products WHERE slug = $1;`, [p.slug]);
+            const existingP = await queryFn(`SELECT id FROM products WHERE slug = $1 OR name = $2 LIMIT 1;`, [p.slug, p.name]);
             let productId;
 
             if (existingP.rows && existingP.rows.length > 0) {
                 productId = existingP.rows[0].id;
+                await queryFn(
+                    `UPDATE products SET name = $1, full_name = $2, subtitle = $3, description = $4, category_id = $5, active = TRUE, updated_at = NOW() WHERE id = $6;`,
+                    [
+                        p.name.substring(0, 195),
+                        (p.fullName || p.name).substring(0, 290),
+                        (p.subtitle || '').substring(0, 290),
+                        p.description || p.name,
+                        catId,
+                        productId
+                    ]
+                );
             } else {
                 const insertP = await queryFn(
                     `INSERT INTO products (slug, name, full_name, subtitle, description, category_id, brand_id, active, rating_average, review_count, created_at, updated_at, version)
@@ -118,14 +157,19 @@ async function seedLiveCatalogue(queryFn) {
                 productId = insertP.rows[0].id;
             }
 
-            // Product Image
+            // Product Image - always ensure the authentic image URL is set
             const imgUrl = p.image || '/logo/watany-logo.png';
-            const imgRes = await queryFn(`SELECT id FROM product_images WHERE product_id = $1;`, [productId]);
+            const imgRes = await queryFn(`SELECT id, url FROM product_images WHERE product_id = $1 ORDER BY display_order ASC;`, [productId]);
             if (!imgRes.rows || imgRes.rows.length === 0) {
                 await queryFn(
                     `INSERT INTO product_images (product_id, url, alt_text, display_order, created_at, updated_at, version)
                      VALUES ($1, $2, $3, 0, NOW(), NOW(), 0);`,
                     [productId, imgUrl, p.name]
+                );
+            } else if (p.image && (!imgRes.rows[0].url || imgRes.rows[0].url === '/logo/watany-logo.png' || imgRes.rows[0].url.includes('placeholder') || imgRes.rows[0].url !== p.image)) {
+                await queryFn(
+                    `UPDATE product_images SET url = $1, alt_text = $2, updated_at = NOW() WHERE id = $3;`,
+                    [p.image, p.name, imgRes.rows[0].id]
                 );
             }
 

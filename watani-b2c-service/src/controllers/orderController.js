@@ -89,10 +89,24 @@ async function getOrderByNumber(req, res) {
 
         const order = rows[0];
 
-        // Access check
-        if (req.user && req.user.id !== order.user_id && !req.user.roles.includes('SUPER_ADMIN') && !req.user.roles.includes('ADMIN')) {
-            // allow access if email matches or admin
-        }
+        // Build shippingAddress object
+        order.shippingAddress = {
+            fullName: order.shipFullName || 'Customer',
+            line1: order.shipLine1 || '',
+            line2: null,
+            city: order.shipCity || '',
+            region: order.shipRegion || '',
+            postalCode: order.shipPostalCode || '',
+            country: order.shipCountry || 'Canada'
+        };
+
+        order.timeline = [
+            {
+                status: order.status || 'PLACED',
+                message: `Order is currently ${order.status || 'PLACED'}`,
+                at: order.createdAt || new Date().toISOString()
+            }
+        ];
 
         const itemsRes = await db.query(`
             SELECT id, product_name as "productName", product_slug as "productSlug", sku, unit,
@@ -101,7 +115,20 @@ async function getOrderByNumber(req, res) {
             WHERE order_id = $1;
         `, [order.id]);
 
-        order.items = itemsRes.rows;
+        order.items = itemsRes.rows.map(item => ({
+            id: item.id,
+            productName: item.productName,
+            productSlug: item.productSlug,
+            sku: item.sku,
+            unit: item.unit || '1 Unit',
+            image: item.imageUrl || '/logo/watany-logo.png',
+            imageUrl: item.imageUrl || '/logo/watany-logo.png',
+            quantity: item.quantity || 1,
+            unitPrice: parseFloat(item.unitPrice) || 0,
+            lineTotal: parseFloat(item.lineTotal) || 0
+        }));
+
+        order.placedAt = order.createdAt;
 
         return res.json(order);
     } catch (err) {
