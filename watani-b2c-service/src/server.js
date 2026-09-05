@@ -10,6 +10,9 @@ const misc = require('./controllers/miscController');
 const app = express();
 const PORT = process.env.PORT || 8080;
 
+// Trust reverse proxy (Traefik / Nginx) so req.secure, req.ip, and X-Forwarded-* headers work properly
+app.set('trust proxy', 1);
+
 // Cookie parser middleware (lightweight, zero-dependency)
 app.use((req, res, next) => {
     req.cookies = {};
@@ -27,20 +30,34 @@ app.use((req, res, next) => {
     next();
 });
 
-// Helper to set cookies with standard options
+// Helper to set cookies with standard options (supports appending multiple Set-Cookie headers)
 app.use((req, res, next) => {
     res.setCookie = (name, val, options = {}) => {
         let cookieStr = `${name}=${encodeURIComponent(val)}`;
         if (options.maxAge) cookieStr += `; Max-Age=${Math.floor(options.maxAge / 1000)}`;
         if (options.expires) cookieStr += `; Expires=${options.expires.toUTCString()}`;
         if (options.httpOnly !== false) cookieStr += '; HttpOnly';
-        if (options.secure !== false && (req.secure || req.headers['x-forwarded-proto'] === 'https' || process.env.COOKIE_SECURE === 'true')) {
+        const isSecure = options.secure !== false && (
+            req.secure ||
+            req.headers['x-forwarded-proto'] === 'https' ||
+            process.env.COOKIE_SECURE === 'true' ||
+            process.env.NODE_ENV === 'production'
+        );
+        if (isSecure) {
             cookieStr += '; Secure';
         }
         cookieStr += `; SameSite=${options.sameSite || 'Lax'}`;
         cookieStr += `; Path=${options.path || '/'}`;
-        res.setHeader('Set-Cookie', cookieStr);
+
+        const existing = res.getHeader('Set-Cookie');
+        if (existing) {
+            const arr = Array.isArray(existing) ? existing : [existing];
+            res.setHeader('Set-Cookie', [...arr, cookieStr]);
+        } else {
+            res.setHeader('Set-Cookie', cookieStr);
+        }
     };
+    res.cookie = res.setCookie;
     next();
 });
 
