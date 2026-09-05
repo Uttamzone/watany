@@ -1,6 +1,7 @@
 const db = require('../db');
 const { resolvePrice } = require('../services/pricing');
 const { getFreightcomQuotes } = require('../services/freightcom');
+const { logAudit } = require('../services/auditService');
 
 async function getQuote(req, res) {
     try {
@@ -275,8 +276,19 @@ async function createIntent(req, res) {
             ]);
         }
 
-        // Deactivate cart
-        if (activeCartId) { await db.query('UPDATE carts SET active = FALSE WHERE id = $1', [activeCartId]); }
+        // Deactivate cart immediately for non-Stripe orders; for Stripe, cart is deactivated once payment is confirmed
+        if (paymentMethod.toUpperCase() !== 'STRIPE' && activeCartId) {
+            await db.query('UPDATE carts SET active = FALSE WHERE id = $1', [activeCartId]);
+        }
+
+        await logAudit({
+            req,
+            actor: userEmail,
+            action: 'ORDER_PLACED',
+            entityType: 'ORDER',
+            entityId: orderNumber,
+            newValue: { grandTotal, paymentMethod, status: initialStatus, itemsCount: orderItems.length }
+        });
 
         const orderObj = {
             id: orderId,
@@ -378,7 +390,7 @@ async function createIntent(req, res) {
                     line_items: stripeLineItems,
                     mode: 'payment',
                     success_url: `${domain}/checkout/confirmation?order=${encodeURIComponent(orderNumber)}`,
-                    cancel_url: `${domain}/checkout`,
+                    cancel_url: `${domain}/checkout?step=shipping&canceled=1`,
                     client_reference_id: orderNumber,
                     customer_email: userEmail && userEmail.includes('@') && !userEmail.includes('.local') ? userEmail : undefined,
                     metadata: {

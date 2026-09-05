@@ -12,12 +12,15 @@ const CART_TOKEN_KEY = "watani.cartToken.v1";
 /** Mirrors CartDtos.CartLine. */
 export type CartLine = {
     itemId: number;
+    id?: number;
     variantId: number;
     productSlug: string;
     productName: string;
     sku: string;
     unit: string;
     image: string | null;
+    imageUrl?: string | null;
+    productImage?: string | null;
     quantity: number;
     unitPrice: number;
     lineTotal: number;

@@ -156,6 +156,10 @@ export function CheckoutView() {
     // this regardless (N-SEC-3).
     const paymentMethod: PaymentMethod = canUseManualPayment ? paymentMethodInput : "STRIPE";
 
+    const [quotes, setQuotes] = useState<ShippingOption[]>([]);
+    const [serviceCode, setServiceCode] = useState<string | null>(null);
+    const [quoting, setQuoting] = useState(false);
+
     // Restore before anything can be typed; runs once.
     //
     // set-state-in-effect is suppressed rather than satisfied here: the rule's usual fix
@@ -166,14 +170,52 @@ export function CheckoutView() {
     /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
         const draft = readCheckoutDraft();
+        let targetAddress = address;
         if (draft) {
             // Only adopt a draft email/address - never clobber a signed-in shopper's
             // account email with an empty string from a partially-filled draft.
             if (draft.email) setEmailInput(draft.email);
             setAddressInput(draft.address);
+            targetAddress = draft.address;
             setNote(draft.note);
             setPaymentMethod(draft.paymentMethod);
+            if (draft.serviceCode) setServiceCode(draft.serviceCode);
         }
+
+        let shouldGoToShipping = draft?.step === "shipping";
+        let isCanceled = false;
+
+        if (typeof window !== "undefined") {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get("step") === "shipping" || params.get("canceled") === "1") {
+                shouldGoToShipping = true;
+            }
+            if (params.get("canceled") === "1") {
+                isCanceled = true;
+            }
+        }
+
+        if (shouldGoToShipping && targetAddress?.line1 && targetAddress?.city) {
+            getShippingQuotes(targetAddress)
+                .then((options) => {
+                    setQuotes(options);
+                    const code = draft?.serviceCode && options.some((o) => o.serviceCode === draft.serviceCode)
+                        ? draft.serviceCode
+                        : (options[0]?.serviceCode ?? null);
+                    setServiceCode(code);
+                    setStep("shipping");
+                    if (isCanceled) {
+                        notifications.info(
+                            "Checkout returned",
+                            "Payment was not completed. You can choose your shipping method or try again.",
+                        );
+                    }
+                })
+                .catch(() => {
+                    setStep("shipping");
+                });
+        }
+
         setRestored(true);
     }, []);
     /* eslint-enable react-hooks/set-state-in-effect */
@@ -218,8 +260,8 @@ export function CheckoutView() {
     // the initial empty state cannot overwrite the draft we are about to read.
     useEffect(() => {
         if (!restored) return;
-        saveCheckoutDraft({email, address, note, paymentMethod});
-    }, [restored, email, address, note, paymentMethod]);
+        saveCheckoutDraft({email, address, note, paymentMethod, step, serviceCode});
+    }, [restored, email, address, note, paymentMethod, step, serviceCode]);
 
     // Which fields have been blurred (or forced visible by submit). Errors are
     // recomputed each render rather than stored, to avoid two sources of truth.
@@ -252,10 +294,6 @@ export function CheckoutView() {
     }, [email, address]);
 
     const detailsValid = Object.keys(errors).length === 0;
-
-    const [quotes, setQuotes] = useState<ShippingOption[]>([]);
-    const [serviceCode, setServiceCode] = useState<string | null>(null);
-    const [quoting, setQuoting] = useState(false);
 
     const [placing, setPlacing] = useState(false);
     /** Set once an order exists, so emptying the cart cannot bounce us to /cart. */
@@ -754,7 +792,7 @@ export function CheckoutView() {
                         <li key={line.itemId} className="flex items-center gap-3">
                             <div className="relative shrink-0 rounded-xl bg-[#f1f3f1] p-1.5">
                                 <Image
-                                    src={productImageSrc(line.image)}
+                                    src={productImageSrc(line.image || (line as any).imageUrl || (line as any).productImage, line.productSlug || line.productName)}
                                     alt={line.productName}
                                     width={200}
                                     height={200}

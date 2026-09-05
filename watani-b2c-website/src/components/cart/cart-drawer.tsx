@@ -113,7 +113,7 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                   >
                     <div className="relative size-20 shrink-0 overflow-hidden rounded-lg border border-gray-200/60 bg-white">
                       <Image
-                        src={productImageSrc(line.image)}
+                        src={productImageSrc(line.image || line.imageUrl || line.productImage, line.productSlug || line.productName)}
                         alt={line.productName}
                         fill
                         className="object-cover"

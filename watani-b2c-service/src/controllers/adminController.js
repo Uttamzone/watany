@@ -1,6 +1,8 @@
 const path = require('path');
 const fs = require('fs');
 const db = require('../db');
+const { logAudit } = require('../services/auditService');
+const { reconcileStripePaymentIfPending } = require('./orderController');
 
 let catalogueMap = new Map();
 try {
@@ -91,6 +93,16 @@ async function decideApproval(req, res) {
                       COALESCE(enabled, TRUE) as enabled;
         `, [newGroup, newStatus, id]);
 
+        if (rows.length > 0) {
+            await logAudit({
+                req,
+                action: isApproved ? 'CUSTOMER_APPROVED' : 'CUSTOMER_REJECTED',
+                entityType: 'CUSTOMER',
+                entityId: id,
+                newValue: { pricingGroup: newGroup, approvalStatus: newStatus, email: rows[0].email }
+            });
+        }
+
         return res.json(rows[0]);
     } catch (err) {
         return res.status(500).json({ error: 'Internal Server Error', message: err.message });
@@ -114,6 +126,15 @@ async function assignPricingGroup(req, res) {
         `, [pricingGroup, id]);
 
         if (rows.length === 0) return res.status(404).json({ error: 'Not Found', message: 'Customer not found' });
+
+        await logAudit({
+            req,
+            action: 'PRICING_GROUP_ASSIGNED',
+            entityType: 'CUSTOMER',
+            entityId: id,
+            newValue: { pricingGroup, email: rows[0].email }
+        });
+
         return res.json(rows[0]);
     } catch (err) {
         return res.status(500).json({ error: 'Internal Server Error', message: err.message });
@@ -137,6 +158,15 @@ async function setApprovalStatus(req, res) {
         `, [approvalStatus, id]);
 
         if (rows.length === 0) return res.status(404).json({ error: 'Not Found', message: 'Customer not found' });
+
+        await logAudit({
+            req,
+            action: 'CUSTOMER_APPROVAL_STATUS_CHANGED',
+            entityType: 'CUSTOMER',
+            entityId: id,
+            newValue: { approvalStatus, email: rows[0].email }
+        });
+
         return res.json(rows[0]);
     } catch (err) {
         return res.status(500).json({ error: 'Internal Server Error', message: err.message });
@@ -159,6 +189,15 @@ async function setCustomerEnabled(req, res) {
         `, [enabled, id]);
 
         if (rows.length === 0) return res.status(404).json({ error: 'Not Found', message: 'Customer not found' });
+
+        await logAudit({
+            req,
+            action: enabled ? 'CUSTOMER_ENABLED' : 'CUSTOMER_DISABLED',
+            entityType: 'CUSTOMER',
+            entityId: id,
+            newValue: { enabled, email: rows[0].email }
+        });
+
         return res.json(rows[0]);
     } catch (err) {
         return res.status(500).json({ error: 'Internal Server Error', message: err.message });
@@ -195,6 +234,14 @@ async function approveCustomerGroup(req, res) {
             WHERE id = $2;
         `, [targetGroup, id]);
 
+        await logAudit({
+            req,
+            action: 'CUSTOMER_APPROVED',
+            entityType: 'CUSTOMER',
+            entityId: id,
+            newValue: { pricingGroup: targetGroup, approvalStatus: 'APPROVED' }
+        });
+
         return res.json({ success: true, message: `Customer approved for group ${targetGroup}` });
     } catch (err) {
         return res.status(500).json({ error: 'Internal Server Error', message: err.message });
@@ -209,6 +256,15 @@ async function rejectCustomerGroup(req, res) {
             SET approval_status = 'REJECTED', updated_at = NOW()
             WHERE id = $1;
         `, [id]);
+
+        await logAudit({
+            req,
+            action: 'CUSTOMER_REJECTED',
+            entityType: 'CUSTOMER',
+            entityId: id,
+            newValue: { approvalStatus: 'REJECTED' }
+        });
+
         return res.json({ success: true, message: 'Customer request rejected' });
     } catch (err) {
         return res.status(500).json({ error: 'Internal Server Error', message: err.message });
@@ -544,6 +600,15 @@ async function updateStock(req, res) {
         }
 
         const threshold = updatedVariant.lowStockThreshold != null ? updatedVariant.lowStockThreshold : 5;
+
+        await logAudit({
+            req,
+            action: 'INVENTORY_UPDATED',
+            entityType: 'INVENTORY',
+            entityId: updatedVariant.sku || updatedVariant.id,
+            newValue: { stockQuantity, sku: updatedVariant.sku }
+        });
+
         return res.json({
             ...updatedVariant,
             lowStock: updatedVariant.stockQuantity <= threshold,
@@ -626,7 +691,8 @@ async function listAdminOrders(req, res) {
 
         const { rows } = await db.query(`
             SELECT id, order_number as "orderNumber", email, status, payment_status as "paymentStatus",
-                   payment_provider as "paymentMethod", pricing_group as "pricingGroup",
+                   payment_provider as "paymentMethod", payment_provider_ref as "paymentProviderRef",
+                   pricing_group as "pricingGroup",
                    subtotal, discount_total as "discountTotal", shipping_total as "shippingTotal",
                    tax_total as "taxTotal", grand_total as "grandTotal", currency,
                    tracking_number as "trackingNumber", tracking_url as "trackingUrl",
@@ -641,6 +707,7 @@ async function listAdminOrders(req, res) {
 
         const formattedOrders = [];
         for (const order of rows) {
+            await reconcileStripePaymentIfPending(order, req);
             const itemsRes = await db.query(`
                 SELECT id, product_name as "productName", product_slug as "productSlug", sku, unit,
                        image_url as "imageUrl", quantity, unit_price as "unitPrice", line_total as "lineTotal"
@@ -668,7 +735,8 @@ async function getAdminOrderDetail(req, res) {
         const { orderNumber } = req.params;
         const { rows } = await db.query(`
             SELECT id, order_number as "orderNumber", email, status, payment_status as "paymentStatus",
-                   payment_provider as "paymentMethod", pricing_group as "pricingGroup",
+                   payment_provider as "paymentMethod", payment_provider_ref as "paymentProviderRef",
+                   pricing_group as "pricingGroup",
                    subtotal, discount_total as "discountTotal", shipping_total as "shippingTotal",
                    tax_total as "taxTotal", grand_total as "grandTotal", currency,
                    tracking_number as "trackingNumber", tracking_url as "trackingUrl",
@@ -684,9 +752,11 @@ async function getAdminOrderDetail(req, res) {
             return res.status(404).json({ error: 'Not Found', message: 'Order not found' });
         }
 
+        await reconcileStripePaymentIfPending(rows[0], req);
+
         const itemsRes = await db.query(`
             SELECT id, product_name as "productName", product_slug as "productSlug", sku, unit,
-                   image_url as "imageUrl", quantity, unit_price as "unitPrice", line_total as "lineTotal"
+               image_url as "imageUrl", quantity, unit_price as "unitPrice", line_total as "lineTotal"
             FROM order_items
             WHERE order_id = $1;
         `, [rows[0].id]);
@@ -728,6 +798,14 @@ async function updateOrderStatus(req, res) {
             return res.status(404).json({ error: 'Not Found', message: 'Order not found' });
         }
 
+        await logAudit({
+            req,
+            action: 'ORDER_STATUS_UPDATE',
+            entityType: 'ORDER',
+            entityId: orderNumber,
+            newValue: { status, trackingNumber, carrierName }
+        });
+
         const itemsRes = await db.query(`
             SELECT id, product_name as "productName", product_slug as "productSlug", sku, unit,
                    image_url as "imageUrl", quantity, unit_price as "unitPrice", line_total as "lineTotal"
@@ -756,6 +834,15 @@ async function markOrderPaid(req, res) {
         `, [reference || null, orderNumber]);
 
         if (rows.length === 0) return res.status(404).json({ error: 'Not Found', message: 'Order not found' });
+
+        await logAudit({
+            req,
+            action: 'ORDER_MARKED_PAID',
+            entityType: 'ORDER',
+            entityId: orderNumber,
+            newValue: { paymentStatus: 'PAID', status: 'PROCESSING', reference }
+        });
+
         const itemsRes = await db.query('SELECT * FROM order_items WHERE order_id = $1', [rows[0].id]);
         return res.json(formatOrderRow(rows[0], itemsRes.rows));
     } catch (err) {
@@ -774,6 +861,15 @@ async function refundOrder(req, res) {
         `, [orderNumber]);
 
         if (rows.length === 0) return res.status(404).json({ error: 'Not Found', message: 'Order not found' });
+
+        await logAudit({
+            req,
+            action: 'ORDER_REFUNDED',
+            entityType: 'ORDER',
+            entityId: orderNumber,
+            newValue: { paymentStatus: 'REFUNDED', status: 'REFUNDED' }
+        });
+
         const itemsRes = await db.query('SELECT * FROM order_items WHERE order_id = $1', [rows[0].id]);
         return res.json(formatOrderRow(rows[0], itemsRes.rows));
     } catch (err) {
@@ -1084,6 +1180,14 @@ async function createProduct(req, res) {
             product.variants.push(variant);
         }
 
+        await logAudit({
+            req,
+            action: 'PRODUCT_CREATED',
+            entityType: 'PRODUCT',
+            entityId: product.slug,
+            newValue: { name: product.name, slug: product.slug, categorySlug: product.categorySlug }
+        });
+
         return res.status(201).json(product);
     } catch (err) {
         console.error('[createProduct error]:', err);
@@ -1152,6 +1256,14 @@ async function updateProduct(req, res) {
             }
         }
 
+        await logAudit({
+            req,
+            action: 'PRODUCT_UPDATED',
+            entityType: 'PRODUCT',
+            entityId: product.slug,
+            newValue: { name: product.name, slug: product.slug, active: product.active }
+        });
+
         return res.json(product);
     } catch (err) {
         console.error('[updateProduct error]:', err);
@@ -1163,6 +1275,15 @@ async function deleteProduct(req, res) {
     try {
         const slugParam = decodeURIComponent(req.params.slug);
         await db.query('UPDATE products SET active = FALSE, updated_at = NOW() WHERE LOWER(slug) = LOWER($1)', [slugParam]);
+
+        await logAudit({
+            req,
+            action: 'PRODUCT_DELETED',
+            entityType: 'PRODUCT',
+            entityId: slugParam,
+            newValue: { active: false }
+        });
+
         return res.status(204).send();
     } catch (err) {
         return res.status(500).json({ error: 'Internal Server Error', message: err.message });

@@ -54,7 +54,7 @@ export function CartView() {
                                 className="shrink-0 rounded-xl bg-[#f1f3f1] p-2"
                             >
                                 <Image
-                                    src={productImageSrc(line.image)}
+                                    src={productImageSrc(line.image || line.imageUrl || line.productImage, line.productSlug || line.productName)}
                                     alt={line.productName}
                                     width={400}
                                     height={400}

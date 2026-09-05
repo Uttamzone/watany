@@ -182,20 +182,19 @@ const CHECKOUT_DRAFT_KEY = "watani.checkoutDraft.v1";
 /** Drafts hold a shipping address, so they expire rather than linger indefinitely. */
 const CHECKOUT_DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
 
-/** What the checkout form restores after a reload or a cancelled Stripe redirect. */
 export type CheckoutDraft = {
     email: string;
     address: Address;
     note: string;
     paymentMethod: PaymentMethod;
+    step?: "details" | "shipping";
+    serviceCode?: string | null;
     /** Epoch ms; a draft older than the TTL is discarded on read. */
     savedAt: number;
 };
 
 /**
- * Persists the in-progress checkout form to localStorage. Shipping quotes are
- * deliberately excluded - they are priced server-side per destination and must be
- * re-fetched, never restored from the client (R-PR-6).
+ * Persists the in-progress checkout form to localStorage.
  */
 export function saveCheckoutDraft(
     draft: Omit<CheckoutDraft, "savedAt">,
@@ -237,6 +236,8 @@ export function readCheckoutDraft(): CheckoutDraft | null {
                 draft.paymentMethod === "E_TRANSFER" || draft.paymentMethod === "CHEQUE"
                     ? draft.paymentMethod
                     : "STRIPE",
+            step: draft.step === "shipping" ? "shipping" : "details",
+            serviceCode: typeof draft.serviceCode === "string" ? draft.serviceCode : null,
             savedAt: draft.savedAt,
         };
     } catch {

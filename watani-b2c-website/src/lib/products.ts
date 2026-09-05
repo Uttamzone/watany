@@ -166,10 +166,24 @@ function toSpecifications(
 /** Shown wherever a product/variant has no image yet - e.g. freshly bulk-uploaded stock. */
 export const PLACEHOLDER_PRODUCT_IMAGE = "/images/placeholder.png";
 
-/** Falls back to the placeholder for an empty/missing image path. */
-export function productImageSrc(image: string | null | undefined): string {
-    if (!image || image.trim().length === 0) return PLACEHOLDER_PRODUCT_IMAGE;
-    const trimmed = image.trim();
+const fallbackImageBySlug = new Map<string, string>();
+for (const fp of fallbackProducts) {
+    if (fp.slug && fp.image) fallbackImageBySlug.set(fp.slug.toLowerCase(), fp.image);
+    if (fp.name && fp.image) fallbackImageBySlug.set(fp.name.toLowerCase().trim(), fp.image);
+}
+
+/** Falls back to the placeholder or authentic catalogue image for an empty/missing image path. */
+export function productImageSrc(image: string | null | undefined, slugOrName?: string | null): string {
+    let raw = image;
+    if (!raw || raw.trim().length === 0 || raw.includes("placeholder")) {
+        if (slugOrName) {
+            const key = slugOrName.toLowerCase().trim();
+            const found = fallbackImageBySlug.get(key);
+            if (found) raw = found;
+        }
+    }
+    if (!raw || raw.trim().length === 0) return PLACEHOLDER_PRODUCT_IMAGE;
+    const trimmed = raw.trim();
 
     const uploadsIdx = trimmed.indexOf("/uploads/");
     if (uploadsIdx !== -1) return trimmed.substring(uploadsIdx);

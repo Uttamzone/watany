@@ -1,4 +1,5 @@
 const db = require('../db');
+const { logAudit } = require('../services/auditService');
 
 /* Addresses */
 async function getAddresses(req, res) {
@@ -145,6 +146,15 @@ async function stripeWebhook(req, res) {
                         updated_at = NOW()
                     WHERE UPPER(order_number) = UPPER($1);
                 `, [orderNumber, paymentRef]);
+
+                await logAudit({
+                    actor: 'stripe_webhook',
+                    action: 'PAYMENT_RECEIVED',
+                    entityType: 'ORDER',
+                    entityId: orderNumber,
+                    newValue: { status: 'PROCESSING', paymentStatus: 'PAID', paymentRef },
+                    req
+                });
             } else if (paymentRef) {
                 await db.query(`
                     UPDATE orders
@@ -153,6 +163,15 @@ async function stripeWebhook(req, res) {
                         updated_at = NOW()
                     WHERE payment_provider_ref = $1;
                 `, [paymentRef]);
+
+                await logAudit({
+                    actor: 'stripe_webhook',
+                    action: 'PAYMENT_RECEIVED',
+                    entityType: 'ORDER',
+                    entityId: paymentRef,
+                    newValue: { status: 'PROCESSING', paymentStatus: 'PAID' },
+                    req
+                });
             }
         } else if (
             eventType === 'charge.failed' ||
@@ -170,6 +189,15 @@ async function stripeWebhook(req, res) {
                         updated_at = NOW()
                     WHERE UPPER(order_number) = UPPER($1);
                 `, [orderNumber]);
+
+                await logAudit({
+                    actor: 'stripe_webhook',
+                    action: 'PAYMENT_FAILED',
+                    entityType: 'ORDER',
+                    entityId: orderNumber,
+                    newValue: { paymentStatus: 'FAILED', reason: dataObject?.last_payment_error?.message || 'Charge failed' },
+                    req
+                });
             }
         }
 

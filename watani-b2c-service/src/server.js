@@ -136,6 +136,8 @@ async function start() {
 
     try {
         await db.initDatabase();
+        const { seedInitialAuditLogsIfEmpty } = require('./services/auditService');
+        await seedInitialAuditLogsIfEmpty();
     } catch (e) {
         console.error('[Database init error]:', e);
     }

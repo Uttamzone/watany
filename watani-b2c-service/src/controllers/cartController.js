@@ -30,13 +30,11 @@ async function formatCartResponse(cartId, req) {
     const { rows: items } = await db.query(`
         SELECT ci.id as item_id, ci.quantity, v.id as variant_id, v.sku, v.unit, v.stock_quantity,
                p.id as product_id, p.name as product_name, p.slug as product_slug,
-               MIN(pi.url) as image_url
+               COALESCE((SELECT url FROM product_images WHERE product_id = p.id ORDER BY display_order ASC LIMIT 1), '/logo/watany-logo.png') as image_url
         FROM cart_items ci
         JOIN product_variants v ON ci.variant_id = v.id
         JOIN products p ON v.product_id = p.id
-        LEFT JOIN product_images pi ON pi.product_id = p.id
         WHERE ci.cart_id = $1
-        GROUP BY ci.id, ci.quantity, v.id, v.sku, v.unit, p.id, p.name, p.slug, ci.created_at
         ORDER BY ci.created_at ASC;
     `, [cartId]);
 
@@ -48,15 +46,20 @@ async function formatCartResponse(cartId, req) {
         const lineTotal = priceInfo.price * item.quantity;
         subtotal += lineTotal;
 
+        const itemImage = item.image_url || '/logo/watany-logo.png';
+
         formattedItems.push({
             id: item.item_id,
+            itemId: item.item_id,
             variantId: item.variant_id,
             productId: item.product_id,
             productName: item.product_name,
             productSlug: item.product_slug,
             sku: item.sku,
             unit: item.unit,
-            imageUrl: item.image_url || '/logo/watany-logo.png',
+            image: itemImage,
+            imageUrl: itemImage,
+            productImage: itemImage,
             quantity: item.quantity,
             unitPrice: priceInfo.price,
             lineTotal,
