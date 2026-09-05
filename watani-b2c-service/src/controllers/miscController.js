@@ -73,9 +73,10 @@ async function stripeWebhook(req, res) {
 
     let event = req.body;
 
-    if (sig && process.env.STRIPE_SECRET_KEY) {
+    const stripeKey = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_API_KEY;
+    if (sig && stripeKey) {
         try {
-            const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+            const stripe = require('stripe')(stripeKey);
             const payload = req.rawBody || JSON.stringify(req.body);
             event = stripe.webhooks.constructEvent(payload, sig, webhookSecret);
             console.log(`[Stripe Webhook] Verified signature for event: ${event.type}`);

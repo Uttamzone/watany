@@ -44,6 +44,7 @@ mapRoute('post', ['/v1/checkout', '/checkout', '/v1/checkout/create-intent', '/c
 /* Orders Routes */
 mapRoute('get', ['/v1/orders', '/orders'], verifyToken, order.getOrders);
 mapRoute('get', ['/v1/orders/:orderNumber', '/orders/:orderNumber'], optionalAuth, order.getOrderByNumber);
+mapRoute('post', ['/v1/orders/lookup', '/orders/lookup'], order.lookupOrder);
 mapRoute('post', ['/v1/orders/:orderNumber/cancel', '/orders/:orderNumber/cancel'], verifyToken, order.cancelOrder);
 mapRoute('post', ['/v1/orders/:orderNumber/return', '/orders/:orderNumber/return'], verifyToken, order.returnOrder);
 

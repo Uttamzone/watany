@@ -96,9 +96,57 @@ async function returnOrder(req, res) {
     }
 }
 
+async function lookupOrder(req, res) {
+    try {
+        const { orderNumber, email } = req.body;
+        if (!orderNumber) {
+            return res.status(400).json({ error: 'Bad Request', message: 'orderNumber is required' });
+        }
+
+        let query = `
+            SELECT id, order_number as "orderNumber", email, status, payment_status as "paymentStatus",
+                   pricing_group as "pricingGroup", subtotal, shipping_total as "shippingTotal",
+                   tax_total as "taxTotal", grand_total as "grandTotal", currency,
+                   tracking_number as "trackingNumber", tracking_url as "trackingUrl",
+                   carrier_name as "carrierName", shipping_method as "shippingMethod",
+                   ship_full_name as "shipFullName", ship_line1 as "shipLine1", ship_city as "shipCity",
+                   ship_region as "shipRegion", ship_postal_code as "shipPostalCode", ship_country as "shipCountry",
+                   created_at as "createdAt"
+            FROM orders
+            WHERE UPPER(order_number) = UPPER($1)
+        `;
+        let params = [orderNumber];
+
+        if (email) {
+            query += ` AND LOWER(email) = LOWER($2)`;
+            params.push(email);
+        }
+
+        const { rows } = await db.query(query, params);
+        if (rows.length === 0) {
+            return res.status(404).json({ error: 'Not Found', message: 'Order not found' });
+        }
+
+        const order = rows[0];
+        const itemsRes = await db.query(`
+            SELECT id, product_name as "productName", product_slug as "productSlug", sku, unit,
+                   image_url as "imageUrl", quantity, unit_price as "unitPrice", line_total as "lineTotal"
+            FROM order_items
+            WHERE order_id = $1;
+        `, [order.id]);
+
+        order.items = itemsRes.rows;
+        return res.json(order);
+    } catch (err) {
+        console.error('[lookupOrder error]:', err);
+        return res.status(500).json({ error: 'Internal Server Error', message: err.message });
+    }
+}
+
 module.exports = {
     getOrders,
     getOrderByNumber,
+    lookupOrder,
     cancelOrder,
     returnOrder
 };

@@ -40,6 +40,8 @@ data:
   STORAGE_BASE_URL: "https://wataniandsons.ca/uploads"
   PAYMENT_PROVIDER: "stripe"
   STRIPE_API_KEY: "sk_live_YOUR_STRIPE_API_KEY"
+  STRIPE_SECRET_KEY: "sk_live_YOUR_STRIPE_API_KEY"
+  FRONTEND_URL: "https://wataniandsons.ca"
   STRIPE_WEBHOOK_SECRET: "whsec_aLPGTG4hhKB1dElq8qBgrIJmM6sUTNio"
   STRIPE_SUCCESS_URL: "https://wataniandsons.ca/checkout/confirmation?order={ORDER}"
   STRIPE_CANCEL_URL: "https://wataniandsons.ca/checkout/cancelled?order={ORDER}"

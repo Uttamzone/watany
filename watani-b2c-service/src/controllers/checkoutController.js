@@ -8,6 +8,18 @@ async function getQuote(req, res) {
         const buyerGroup = req.user ? req.user.pricingGroup : 'RETAIL';
 
         // Fetch cart items
+        const sessionToken = req.headers['x-cart-token'] || req.headers['x-cart-session'] || req.query?.sessionToken;
+        let activeCartId = cartId;
+        if (!activeCartId) {
+            if (req.user) {
+                const { rows } = await db.query('SELECT id FROM carts WHERE user_id = $1 AND active = TRUE ORDER BY id DESC LIMIT 1', [req.user.id]);
+                if (rows.length > 0) activeCartId = rows[0].id;
+            } else if (sessionToken) {
+                const { rows } = await db.query('SELECT id FROM carts WHERE session_token = $1 AND active = TRUE ORDER BY id DESC LIMIT 1', [sessionToken]);
+                if (rows.length > 0) activeCartId = rows[0].id;
+            }
+        }
+
         let query = `
             SELECT ci.quantity, v.id as variant_id, v.sku, p.name as product_name
             FROM cart_items ci
@@ -16,9 +28,9 @@ async function getQuote(req, res) {
         `;
         let params = [];
 
-        if (cartId) {
+        if (activeCartId) {
             query += ` WHERE ci.cart_id = $1`;
-            params.push(cartId);
+            params.push(activeCartId);
         } else if (req.user) {
             query += ` JOIN carts c ON ci.cart_id = c.id WHERE c.user_id = $1 AND c.active = TRUE`;
             params.push(req.user.id);
@@ -89,17 +101,51 @@ async function createIntent(req, res) {
         const buyerGroup = req.user ? req.user.pricingGroup : 'RETAIL';
         const userEmail = req.user ? req.user.email : (shippingAddress ? shippingAddress.email : 'guest@watani.local');
 
+        const sessionToken = req.headers['x-cart-token'] || req.headers['x-cart-session'] || req.query?.sessionToken;
+        let activeCartId = cartId;
+        if (!activeCartId) {
+            if (req.user) {
+                const { rows } = await db.query('SELECT id FROM carts WHERE user_id = $1 AND active = TRUE ORDER BY id DESC LIMIT 1', [req.user.id]);
+                if (rows.length > 0) activeCartId = rows[0].id;
+            } else if (sessionToken) {
+                const { rows } = await db.query('SELECT id FROM carts WHERE session_token = $1 AND active = TRUE ORDER BY id DESC LIMIT 1', [sessionToken]);
+                if (rows.length > 0) activeCartId = rows[0].id;
+            }
+        }
+
         // Fetch items
-        const { rows: items } = await db.query(`
-            SELECT ci.quantity, v.id as variant_id, v.sku, v.unit, p.name as product_name, p.slug as product_slug,
-                   MIN(pi.url) as image_url
-            FROM cart_items ci
-            JOIN product_variants v ON ci.variant_id = v.id
-            JOIN products p ON v.product_id = p.id
-            LEFT JOIN product_images pi ON pi.product_id = p.id
-            WHERE ci.cart_id = $1
-            GROUP BY ci.id, ci.quantity, v.id, v.sku, v.unit, p.id, p.name, p.slug;
-        `, [cartId]);
+        let items = [];
+        if (activeCartId) {
+            const { rows } = await db.query(`
+                SELECT ci.quantity, v.id as variant_id, v.sku, v.unit, p.name as product_name, p.slug as product_slug,
+                       MIN(pi.url) as image_url
+                FROM cart_items ci
+                JOIN product_variants v ON ci.variant_id = v.id
+                JOIN products p ON v.product_id = p.id
+                LEFT JOIN product_images pi ON pi.product_id = p.id
+                WHERE ci.cart_id = $1
+                GROUP BY ci.id, ci.quantity, v.id, v.sku, v.unit, p.id, p.name, p.slug;
+            `, [activeCartId]);
+            items = rows;
+        }
+
+        if (items.length === 0 && Array.isArray(req.body.items) && req.body.items.length > 0) {
+            for (const it of req.body.items) {
+                const vId = it.variantId || it.id;
+                const { rows: vRows } = await db.query(`
+                    SELECT v.id as variant_id, v.sku, v.unit, p.name as product_name, p.slug as product_slug,
+                           MIN(pi.url) as image_url
+                    FROM product_variants v
+                    JOIN products p ON v.product_id = p.id
+                    LEFT JOIN product_images pi ON pi.product_id = p.id
+                    WHERE v.id = $1
+                    GROUP BY v.id, v.sku, v.unit, p.name, p.slug
+                `, [vId]);
+                if (vRows.length > 0) {
+                    items.push({ ...vRows[0], quantity: it.quantity || 1 });
+                }
+            }
+        }
 
         if (items.length === 0) {
             return res.status(400).json({ error: 'Bad Request', message: 'Cart is empty' });
@@ -204,7 +250,7 @@ async function createIntent(req, res) {
         }
 
         // Deactivate cart
-        await db.query('UPDATE carts SET active = FALSE WHERE id = $1', [cartId]);
+        if (activeCartId) { await db.query('UPDATE carts SET active = FALSE WHERE id = $1', [activeCartId]); }
 
         const orderObj = {
             id: orderId,
@@ -225,10 +271,13 @@ async function createIntent(req, res) {
             placedAt: new Date().toISOString()
         };
 
-        if (process.env.STRIPE_SECRET_KEY && paymentMethod === 'STRIPE') {
+        const stripeKey = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_API_KEY;
+        const isStripe = (paymentMethod || '').toUpperCase() === 'STRIPE';
+
+        if (stripeKey && isStripe) {
             try {
-                const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-                const domain = process.env.FRONTEND_URL || 'http://localhost:3000';
+                const stripe = require('stripe')(stripeKey);
+                const domain = process.env.STOREFRONT_BASE_URL || process.env.FRONTEND_URL || 'https://wataniandsons.ca';
                 const session = await stripe.checkout.sessions.create({
                     payment_method_types: ['card'],
                     line_items: orderItems.map(item => ({

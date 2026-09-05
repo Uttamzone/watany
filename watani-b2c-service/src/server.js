@@ -33,6 +33,10 @@ app.use((req, res, next) => {
     next();
 });
 
+// Static uploads serving
+const uploadsDir = process.env.STORAGE_DIR || path.join(__dirname, '../uploads');
+app.use('/uploads', express.static(uploadsDir));
+
 // API Routes
 app.use('/api', apiRouter);
 
@@ -43,6 +47,14 @@ app.get('/', (req, res) => {
         status: 'UP',
         version: '1.0.0',
         documentation: '/api/health'
+    });
+});
+
+app.get(['/actuator/health', '/health'], (req, res) => {
+    res.json({
+        status: 'UP',
+        service: 'watani-b2c-express-service',
+        timestamp: new Date().toISOString()
     });
 });
 

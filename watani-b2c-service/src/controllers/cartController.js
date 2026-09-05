@@ -3,7 +3,7 @@ const { resolvePrice } = require('../services/pricing');
 
 async function findOrCreateCart(req) {
     const userId = req.user ? req.user.id : null;
-    const sessionToken = req.headers['x-cart-session'] || req.query.sessionToken || null;
+    const sessionToken = req.headers['x-cart-token'] || req.headers['x-cart-session'] || req.query.sessionToken || null;
 
     if (userId) {
         let { rows } = await db.query('SELECT id FROM carts WHERE user_id = $1 AND active = TRUE ORDER BY id DESC LIMIT 1', [userId]);
@@ -65,8 +65,12 @@ async function formatCartResponse(cartId, req) {
         });
     }
 
+    const { rows: cartRows } = await db.query('SELECT session_token FROM carts WHERE id = $1', [cartId]);
+    const sessionToken = cartRows.length > 0 ? cartRows[0].session_token : null;
+
     return {
         id: cartId,
+        sessionToken,
         items: formattedItems,
         itemCount: formattedItems.reduce((sum, i) => sum + i.quantity, 0),
         subtotal,
