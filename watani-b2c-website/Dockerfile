@@ -9,7 +9,7 @@ ARG NEXT_PUBLIC_API_BASE_URL=https://wataniandsons.ca
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 ARG NEXT_PUBLIC_SITE_URL=https://wataniandsons.ca
 ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
-RUN NODE_OPTIONS="--max-old-space-size=1024" npm run build
+RUN NODE_OPTIONS="--max-old-space-size=768" npm run build
 
 FROM node:22-alpine
 WORKDIR /app
@@ -22,7 +22,7 @@ COPY --from=build /app/.next/static ./.next/static
 # Standalone server binds 127.0.0.1 unless HOSTNAME is set - else unreachable from outside.
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
-ENV NODE_OPTIONS="--max-old-space-size=192"
+ENV NODE_OPTIONS="--max-old-space-size=384"
 
 EXPOSE 3000
 CMD ["node", "server.js"]
