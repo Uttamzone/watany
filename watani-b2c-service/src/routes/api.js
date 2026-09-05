@@ -9,11 +9,15 @@ const checkout = require('../controllers/checkoutController');
 const order = require('../controllers/orderController');
 const admin = require('../controllers/adminController');
 const misc = require('../controllers/miscController');
+const upload = require('../middleware/upload');
 
-/* Helper to map routes to multiple paths */
-function mapRoute(method, paths, ...handlers) {
-    for (const p of paths) {
-        router[method](p, ...handlers);
+/* Helper to map routes to multiple paths and methods */
+function mapRoute(methods, paths, ...handlers) {
+    const methodList = Array.isArray(methods) ? methods : [methods];
+    for (const m of methodList) {
+        for (const p of paths) {
+            router[m](p, ...handlers);
+        }
     }
 }
 
@@ -79,11 +83,14 @@ mapRoute('delete', ['/v1/admin/catalogue/categories/:id', '/admin/catalogue/cate
 mapRoute('get', ['/v1/admin/catalogue/products', '/admin/catalogue/products'], verifyToken, requireAdmin, admin.listAdminProducts);
 mapRoute('post', ['/v1/admin/catalogue/products', '/admin/catalogue/products'], verifyToken, requireAdmin, admin.createProduct);
 mapRoute('get', ['/v1/admin/catalogue/products/export', '/admin/catalogue/products/export'], verifyToken, requireAdmin, admin.exportProductsCsv);
+mapRoute('get', ['/v1/admin/catalogue/products/bulk-upload-template', '/admin/catalogue/products/bulk-upload-template'], verifyToken, requireAdmin, admin.downloadBulkUploadTemplate);
+mapRoute('post', ['/v1/admin/catalogue/products/bulk-upload', '/admin/catalogue/products/bulk-upload'], verifyToken, requireAdmin, upload.single('file'), admin.bulkUploadProducts);
+mapRoute('post', ['/v1/admin/catalogue/products/bulk-upload-images', '/admin/catalogue/products/bulk-upload-images'], verifyToken, requireAdmin, upload.single('file'), admin.bulkUploadProductImages);
 mapRoute('get', ['/v1/admin/catalogue/low-stock', '/admin/catalogue/low-stock'], verifyToken, requireAdmin, admin.getLowStockVariants);
 mapRoute('get', ['/v1/admin/catalogue/products/:slug', '/admin/catalogue/products/:slug'], verifyToken, requireAdmin, admin.getAdminProduct);
 mapRoute('put', ['/v1/admin/catalogue/products/:slug', '/admin/catalogue/products/:slug'], verifyToken, requireAdmin, admin.updateProduct);
 mapRoute('delete', ['/v1/admin/catalogue/products/:slug', '/admin/catalogue/products/:slug'], verifyToken, requireAdmin, admin.deleteProduct);
-mapRoute('post', ['/v1/admin/catalogue/products/:slug/images', '/admin/catalogue/products/:slug/images'], verifyToken, requireAdmin, admin.uploadProductImage);
+mapRoute('post', ['/v1/admin/catalogue/products/:slug/images', '/admin/catalogue/products/:slug/images'], verifyToken, requireAdmin, upload.single('file'), admin.uploadProductImage);
 mapRoute('delete', ['/v1/admin/catalogue/products/:slug/images/:imageId', '/admin/catalogue/products/:slug/images/:imageId'], verifyToken, requireAdmin, admin.deleteProductImage);
 mapRoute('put', ['/v1/admin/catalogue/products/:slug/images/:imageId/default', '/admin/catalogue/products/:slug/images/:imageId/default'], verifyToken, requireAdmin, admin.setDefaultProductImage);
 mapRoute('put', ['/v1/admin/catalogue/variants/:sku/stock', '/admin/catalogue/variants/:sku/stock', '/v1/admin/catalogue/stock', '/admin/catalogue/stock'], verifyToken, requireAdmin, admin.updateStock);
@@ -91,7 +98,7 @@ mapRoute('put', ['/v1/admin/catalogue/variants/:sku/stock', '/admin/catalogue/va
 /* Orders */
 mapRoute('get', ['/v1/admin/orders', '/admin/orders'], verifyToken, requireAdmin, admin.listAdminOrders);
 mapRoute('get', ['/v1/admin/orders/:orderNumber', '/admin/orders/:orderNumber'], verifyToken, requireAdmin, admin.getAdminOrderDetail);
-mapRoute('put', ['/v1/admin/orders/:orderNumber/status', '/admin/orders/:orderNumber/status', '/v1/admin/orders/:orderNumber/transition', '/admin/orders/:orderNumber/transition'], verifyToken, requireAdmin, admin.updateOrderStatus);
+mapRoute(['put', 'post'], ['/v1/admin/orders/:orderNumber/status', '/admin/orders/:orderNumber/status', '/v1/admin/orders/:orderNumber/transition', '/admin/orders/:orderNumber/transition'], verifyToken, requireAdmin, admin.updateOrderStatus);
 mapRoute('post', ['/v1/admin/orders/:orderNumber/paid', '/admin/orders/:orderNumber/paid', '/v1/admin/orders/:orderNumber/mark-paid', '/admin/orders/:orderNumber/mark-paid'], verifyToken, requireAdmin, admin.markOrderPaid);
 mapRoute('post', ['/v1/admin/orders/:orderNumber/refund', '/admin/orders/:orderNumber/refund'], verifyToken, requireAdmin, admin.refundOrder);
 mapRoute('get', ['/v1/admin/orders/:orderNumber/boxes', '/admin/orders/:orderNumber/boxes'], verifyToken, requireAdmin, admin.getOrderBoxes);
@@ -117,17 +124,17 @@ mapRoute('put', ['/v1/admin/content/:id', '/admin/content/:id'], verifyToken, re
 
 /* Settings & Master Data */
 mapRoute('get', ['/v1/admin/settings/hs-code-tax-rates', '/admin/settings/hs-code-tax-rates'], verifyToken, requireAdmin, admin.listHsCodeTaxRates);
-mapRoute('post', ['/v1/admin/settings/hs-code-tax-rates', '/admin/settings/hs-code-tax-rates'], verifyToken, requireAdmin, admin.createHsCodeTaxRate);
+mapRoute(['post', 'put'], ['/v1/admin/settings/hs-code-tax-rates', '/admin/settings/hs-code-tax-rates'], verifyToken, requireAdmin, admin.createHsCodeTaxRate);
 mapRoute('delete', ['/v1/admin/settings/hs-code-tax-rates/:id', '/admin/settings/hs-code-tax-rates/:id'], verifyToken, requireAdmin, admin.deleteHsCodeTaxRate);
 mapRoute('get', ['/v1/admin/settings/shipping-rates', '/admin/settings/shipping-rates'], verifyToken, requireAdmin, admin.listShippingRates);
-mapRoute('post', ['/v1/admin/settings/shipping-rates', '/admin/settings/shipping-rates'], verifyToken, requireAdmin, admin.saveShippingRate);
+mapRoute(['post', 'put'], ['/v1/admin/settings/shipping-rates', '/admin/settings/shipping-rates'], verifyToken, requireAdmin, admin.saveShippingRate);
 mapRoute('get', ['/v1/admin/settings/shipping-origin', '/admin/settings/shipping-origin'], verifyToken, requireAdmin, admin.getShippingOrigin);
-mapRoute('post', ['/v1/admin/settings/shipping-origin', '/admin/settings/shipping-origin'], verifyToken, requireAdmin, admin.saveShippingOrigin);
+mapRoute(['post', 'put'], ['/v1/admin/settings/shipping-origin', '/admin/settings/shipping-origin'], verifyToken, requireAdmin, admin.saveShippingOrigin);
 mapRoute('get', ['/v1/admin/settings/currency-rates', '/admin/settings/currency-rates'], verifyToken, requireAdmin, admin.listCurrencyRates);
-mapRoute('post', ['/v1/admin/settings/currency-rates', '/admin/settings/currency-rates'], verifyToken, requireAdmin, admin.saveCurrencyRate);
+mapRoute(['post', 'put'], ['/v1/admin/settings/currency-rates', '/admin/settings/currency-rates'], verifyToken, requireAdmin, admin.saveCurrencyRate);
 mapRoute('delete', ['/v1/admin/settings/currency-rates/:id', '/admin/settings/currency-rates/:id'], verifyToken, requireAdmin, admin.deleteCurrencyRate);
 mapRoute('get', ['/v1/admin/settings/pallet-shipping', '/admin/settings/pallet-shipping'], verifyToken, requireAdmin, admin.getPalletShippingSettings);
-mapRoute('post', ['/v1/admin/settings/pallet-shipping', '/admin/settings/pallet-shipping'], verifyToken, requireAdmin, admin.savePalletShippingSettings);
+mapRoute(['post', 'put'], ['/v1/admin/settings/pallet-shipping', '/admin/settings/pallet-shipping'], verifyToken, requireAdmin, admin.savePalletShippingSettings);
 
 /* Reports & KPIs */
 mapRoute('get', ['/v1/admin/dashboard', '/admin/dashboard', '/v1/admin/reports/kpis', '/admin/reports/kpis'], verifyToken, requireAdmin, admin.getKpis);

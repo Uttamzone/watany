@@ -1918,6 +1918,8 @@ export function pendingReviews(page: number, size = 25): Promise<PageResponse<Re
     );
 }
 
+export const listReviews = pendingReviews;
+
 export function moderateReview(id: number, approve: boolean): Promise<Review> {
     return fetchWithFallback(
         () => apiFetch<Review>(`/api/admin/reviews/${id}/moderate?approve=${approve}`, {

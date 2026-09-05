@@ -383,6 +383,11 @@ async function createTablesPgMem(memDb) {
             length_cm NUMERIC(8, 2) DEFAULT 20,
             width_cm NUMERIC(8, 2) DEFAULT 20,
             height_cm NUMERIC(8, 2) DEFAULT 20,
+            length_in NUMERIC(8, 2) DEFAULT 12,
+            width_in NUMERIC(8, 2) DEFAULT 10,
+            height_in NUMERIC(8, 2) DEFAULT 8,
+            label TEXT,
+            auto_generated BOOLEAN DEFAULT FALSE,
             items TEXT,
             created_at TIMESTAMP NOT NULL DEFAULT NOW()
         );`
@@ -558,6 +563,11 @@ async function ensureAllTables(client) {
             length_cm NUMERIC(8, 2) DEFAULT 20,
             width_cm NUMERIC(8, 2) DEFAULT 20,
             height_cm NUMERIC(8, 2) DEFAULT 20,
+            length_in NUMERIC(8, 2) DEFAULT 12,
+            width_in NUMERIC(8, 2) DEFAULT 10,
+            height_in NUMERIC(8, 2) DEFAULT 8,
+            label TEXT,
+            auto_generated BOOLEAN DEFAULT FALSE,
             items JSONB,
             created_at TIMESTAMP NOT NULL DEFAULT NOW()
         );`
@@ -583,6 +593,11 @@ async function ensureAllTables(client) {
             ALTER TABLE users ADD COLUMN IF NOT EXISTS business_licence_ref VARCHAR(255);
             ALTER TABLE users ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT TRUE;
             ALTER TABLE users ADD COLUMN IF NOT EXISTS requested_group VARCHAR(32);
+            ALTER TABLE order_boxes ADD COLUMN IF NOT EXISTS length_in NUMERIC(8, 2);
+            ALTER TABLE order_boxes ADD COLUMN IF NOT EXISTS width_in NUMERIC(8, 2);
+            ALTER TABLE order_boxes ADD COLUMN IF NOT EXISTS height_in NUMERIC(8, 2);
+            ALTER TABLE order_boxes ADD COLUMN IF NOT EXISTS label VARCHAR(255);
+            ALTER TABLE order_boxes ADD COLUMN IF NOT EXISTS auto_generated BOOLEAN DEFAULT FALSE;
         `);
     } catch (e) {}
 

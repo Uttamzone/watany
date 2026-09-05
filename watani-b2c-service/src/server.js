@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 require('dotenv').config();
 
 const db = require('./db');
@@ -93,7 +94,14 @@ app.use((req, res, next) => {
 
 // Static uploads serving
 const uploadsDir = process.env.STORAGE_DIR || path.join(__dirname, '../uploads');
+if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+}
 app.use('/uploads', express.static(uploadsDir));
+const publicUploads = path.join(__dirname, '../../watani-b2c-website/public/uploads');
+if (fs.existsSync(publicUploads)) {
+    app.use('/uploads', express.static(publicUploads));
+}
 
 // API Routes
 app.use('/api', apiRouter);
