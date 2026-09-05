@@ -1672,7 +1672,19 @@ export function listStaff(
         direction,
     });
     return fetchWithFallback(
-        () => apiFetch<PageResponse<StaffResponse>>(`/api/admin/staff?${params.toString()}`),
+        async () => {
+            const res = await apiFetch<any>(`/api/admin/staff?${params.toString()}`);
+            if (Array.isArray(res)) {
+                return {
+                    content: res,
+                    page,
+                    size,
+                    totalElements: res.length,
+                    totalPages: Math.ceil(res.length / size) || 1
+                };
+            }
+            return res;
+        },
         () => ({
             content: stateStaff,
             page,

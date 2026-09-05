@@ -53,9 +53,10 @@ export default function AdminStaffPage() {
         adminApi
             .listStaff(appliedEmail, page, PAGE_SIZE, sortKey, sortDirection)
             .then((result) => {
-                setItems(result.content);
-                setTotalElements(result.totalElements);
-                setTotalPages(result.totalPages);
+                const list = Array.isArray(result) ? result : (result?.content ?? []);
+                setItems(list);
+                setTotalElements(result?.totalElements ?? list.length);
+                setTotalPages(result?.totalPages ?? (Math.ceil(list.length / PAGE_SIZE) || 1));
             })
             .catch((err) => {
                 const message = err instanceof ApiError ? err.message : "Failed to load staff.";

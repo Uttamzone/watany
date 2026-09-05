@@ -73,9 +73,13 @@ const ADMIN_ROUTE_PERMISSIONS: { path: string; permission: Permission }[] = [
     {path: "/admin/orders", permission: "ORDER_READ"},
     {path: "/admin/customers", permission: "CUSTOMER_READ"},
     {path: "/admin/catalogue", permission: "CATALOGUE_READ"},
+    {path: "/admin/categories", permission: "CATALOGUE_READ"},
     {path: "/admin/stock", permission: "INVENTORY_WRITE"},
     {path: "/admin/master-data", permission: "CATALOGUE_READ"},
+    {path: "/admin/logistics", permission: "ORDER_READ"},
+    {path: "/admin/coupons", permission: "CATALOGUE_READ"},
     {path: "/admin/reviews", permission: "REVIEW_MODERATE"},
+    {path: "/admin/content", permission: "CATALOGUE_READ"},
     {path: "/admin/audit", permission: "AUDIT_READ"},
     {path: "/admin", permission: "REPORT_READ"},
 ];

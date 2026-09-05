@@ -68,17 +68,81 @@ mapRoute('put', ['/v1/admin/customers/:id/approval-status', '/admin/customers/:i
 mapRoute('put', ['/v1/admin/customers/:id/enabled', '/admin/customers/:id/enabled'], verifyToken, requireAdmin, admin.setCustomerEnabled);
 mapRoute('post', ['/v1/admin/customers/:id/approve', '/admin/customers/:id/approve'], verifyToken, requireAdmin, admin.approveCustomerGroup);
 mapRoute('post', ['/v1/admin/customers/:id/reject', '/admin/customers/:id/reject'], verifyToken, requireAdmin, admin.rejectCustomerGroup);
+
+/* Categories */
+mapRoute('get', ['/v1/admin/catalogue/categories', '/admin/catalogue/categories', '/v1/admin/categories', '/admin/categories'], verifyToken, requireAdmin, admin.listCategories);
+mapRoute('post', ['/v1/admin/catalogue/categories', '/admin/catalogue/categories', '/v1/admin/categories', '/admin/categories'], verifyToken, requireAdmin, admin.createCategory);
+mapRoute('put', ['/v1/admin/catalogue/categories/:id', '/admin/catalogue/categories/:id', '/v1/admin/categories/:id', '/admin/categories/:id'], verifyToken, requireAdmin, admin.updateCategory);
+mapRoute('delete', ['/v1/admin/catalogue/categories/:id', '/admin/catalogue/categories/:id', '/v1/admin/categories/:id', '/admin/categories/:id'], verifyToken, requireAdmin, admin.deleteCategory);
+
+/* Products CRUD & Media */
 mapRoute('get', ['/v1/admin/catalogue/products', '/admin/catalogue/products'], verifyToken, requireAdmin, admin.listAdminProducts);
+mapRoute('post', ['/v1/admin/catalogue/products', '/admin/catalogue/products'], verifyToken, requireAdmin, admin.createProduct);
+mapRoute('get', ['/v1/admin/catalogue/products/export', '/admin/catalogue/products/export'], verifyToken, requireAdmin, admin.exportProductsCsv);
+mapRoute('get', ['/v1/admin/catalogue/low-stock', '/admin/catalogue/low-stock'], verifyToken, requireAdmin, admin.getLowStockVariants);
 mapRoute('get', ['/v1/admin/catalogue/products/:slug', '/admin/catalogue/products/:slug'], verifyToken, requireAdmin, admin.getAdminProduct);
+mapRoute('put', ['/v1/admin/catalogue/products/:slug', '/admin/catalogue/products/:slug'], verifyToken, requireAdmin, admin.updateProduct);
+mapRoute('delete', ['/v1/admin/catalogue/products/:slug', '/admin/catalogue/products/:slug'], verifyToken, requireAdmin, admin.deleteProduct);
+mapRoute('post', ['/v1/admin/catalogue/products/:slug/images', '/admin/catalogue/products/:slug/images'], verifyToken, requireAdmin, admin.uploadProductImage);
+mapRoute('delete', ['/v1/admin/catalogue/products/:slug/images/:imageId', '/admin/catalogue/products/:slug/images/:imageId'], verifyToken, requireAdmin, admin.deleteProductImage);
+mapRoute('put', ['/v1/admin/catalogue/products/:slug/images/:imageId/default', '/admin/catalogue/products/:slug/images/:imageId/default'], verifyToken, requireAdmin, admin.setDefaultProductImage);
 mapRoute('put', ['/v1/admin/catalogue/variants/:sku/stock', '/admin/catalogue/variants/:sku/stock', '/v1/admin/catalogue/stock', '/admin/catalogue/stock'], verifyToken, requireAdmin, admin.updateStock);
+
+/* Orders */
 mapRoute('get', ['/v1/admin/orders', '/admin/orders'], verifyToken, requireAdmin, admin.listAdminOrders);
 mapRoute('get', ['/v1/admin/orders/:orderNumber', '/admin/orders/:orderNumber'], verifyToken, requireAdmin, admin.getAdminOrderDetail);
 mapRoute('put', ['/v1/admin/orders/:orderNumber/status', '/admin/orders/:orderNumber/status', '/v1/admin/orders/:orderNumber/transition', '/admin/orders/:orderNumber/transition'], verifyToken, requireAdmin, admin.updateOrderStatus);
-mapRoute('post', ['/v1/admin/orders/:orderNumber/paid', '/admin/orders/:orderNumber/paid'], verifyToken, requireAdmin, admin.markOrderPaid);
+mapRoute('post', ['/v1/admin/orders/:orderNumber/paid', '/admin/orders/:orderNumber/paid', '/v1/admin/orders/:orderNumber/mark-paid', '/admin/orders/:orderNumber/mark-paid'], verifyToken, requireAdmin, admin.markOrderPaid);
 mapRoute('post', ['/v1/admin/orders/:orderNumber/refund', '/admin/orders/:orderNumber/refund'], verifyToken, requireAdmin, admin.refundOrder);
+mapRoute('get', ['/v1/admin/orders/:orderNumber/boxes', '/admin/orders/:orderNumber/boxes'], verifyToken, requireAdmin, admin.getOrderBoxes);
+mapRoute('put', ['/v1/admin/orders/:orderNumber/boxes', '/admin/orders/:orderNumber/boxes'], verifyToken, requireAdmin, admin.updateOrderBoxes);
+mapRoute('post', ['/v1/admin/orders/:orderNumber/rates', '/admin/orders/:orderNumber/rates'], verifyToken, requireAdmin, admin.getOrderRates);
+mapRoute('post', ['/v1/admin/orders/:orderNumber/shipment', '/admin/orders/:orderNumber/shipment'], verifyToken, requireAdmin, admin.bookOrderShipment);
+mapRoute('delete', ['/v1/admin/orders/:orderNumber/shipment', '/admin/orders/:orderNumber/shipment'], verifyToken, requireAdmin, admin.cancelOrderShipment);
+
+/* Coupons */
+mapRoute('get', ['/v1/admin/coupons', '/admin/coupons'], verifyToken, requireAdmin, admin.listCoupons);
+mapRoute('post', ['/v1/admin/coupons', '/admin/coupons'], verifyToken, requireAdmin, admin.createCoupon);
+mapRoute('put', ['/v1/admin/coupons/:id', '/admin/coupons/:id'], verifyToken, requireAdmin, admin.updateCoupon);
+mapRoute('delete', ['/v1/admin/coupons/:id', '/admin/coupons/:id'], verifyToken, requireAdmin, admin.deleteCoupon);
+
+/* Reviews */
+mapRoute('get', ['/v1/admin/reviews', '/admin/reviews'], verifyToken, requireAdmin, admin.listReviews);
+mapRoute('post', ['/v1/admin/reviews/:id/moderate', '/admin/reviews/:id/moderate'], verifyToken, requireAdmin, admin.moderateReview);
+
+/* Content Blocks */
+mapRoute('get', ['/v1/admin/content', '/admin/content'], verifyToken, requireAdmin, admin.listContent);
+mapRoute('post', ['/v1/admin/content', '/admin/content'], verifyToken, requireAdmin, admin.createContent);
+mapRoute('put', ['/v1/admin/content/:id', '/admin/content/:id'], verifyToken, requireAdmin, admin.updateContent);
+
+/* Settings & Master Data */
+mapRoute('get', ['/v1/admin/settings/hs-code-tax-rates', '/admin/settings/hs-code-tax-rates'], verifyToken, requireAdmin, admin.listHsCodeTaxRates);
+mapRoute('post', ['/v1/admin/settings/hs-code-tax-rates', '/admin/settings/hs-code-tax-rates'], verifyToken, requireAdmin, admin.createHsCodeTaxRate);
+mapRoute('delete', ['/v1/admin/settings/hs-code-tax-rates/:id', '/admin/settings/hs-code-tax-rates/:id'], verifyToken, requireAdmin, admin.deleteHsCodeTaxRate);
+mapRoute('get', ['/v1/admin/settings/shipping-rates', '/admin/settings/shipping-rates'], verifyToken, requireAdmin, admin.listShippingRates);
+mapRoute('post', ['/v1/admin/settings/shipping-rates', '/admin/settings/shipping-rates'], verifyToken, requireAdmin, admin.saveShippingRate);
+mapRoute('get', ['/v1/admin/settings/shipping-origin', '/admin/settings/shipping-origin'], verifyToken, requireAdmin, admin.getShippingOrigin);
+mapRoute('post', ['/v1/admin/settings/shipping-origin', '/admin/settings/shipping-origin'], verifyToken, requireAdmin, admin.saveShippingOrigin);
+mapRoute('get', ['/v1/admin/settings/currency-rates', '/admin/settings/currency-rates'], verifyToken, requireAdmin, admin.listCurrencyRates);
+mapRoute('post', ['/v1/admin/settings/currency-rates', '/admin/settings/currency-rates'], verifyToken, requireAdmin, admin.saveCurrencyRate);
+mapRoute('delete', ['/v1/admin/settings/currency-rates/:id', '/admin/settings/currency-rates/:id'], verifyToken, requireAdmin, admin.deleteCurrencyRate);
+mapRoute('get', ['/v1/admin/settings/pallet-shipping', '/admin/settings/pallet-shipping'], verifyToken, requireAdmin, admin.getPalletShippingSettings);
+mapRoute('post', ['/v1/admin/settings/pallet-shipping', '/admin/settings/pallet-shipping'], verifyToken, requireAdmin, admin.savePalletShippingSettings);
+
+/* Reports & KPIs */
 mapRoute('get', ['/v1/admin/dashboard', '/admin/dashboard', '/v1/admin/reports/kpis', '/admin/reports/kpis'], verifyToken, requireAdmin, admin.getKpis);
 mapRoute('get', ['/v1/admin/reports/sales', '/admin/reports/sales'], verifyToken, requireAdmin, admin.getSalesReport);
+
+/* Staff Management */
 mapRoute('get', ['/v1/admin/staff', '/admin/staff'], verifyToken, requireAdmin, admin.listStaff);
+mapRoute('get', ['/v1/admin/staff/roles', '/admin/staff/roles'], verifyToken, requireAdmin, admin.listStaffRoles);
+mapRoute('post', ['/v1/admin/staff', '/admin/staff'], verifyToken, requireAdmin, admin.createStaff);
+mapRoute('put', ['/v1/admin/staff/:userId/role', '/admin/staff/:userId/role'], verifyToken, requireAdmin, admin.assignStaffRole);
+mapRoute('put', ['/v1/admin/staff/:userId/enabled', '/admin/staff/:userId/enabled'], verifyToken, requireAdmin, admin.setStaffEnabled);
+mapRoute('delete', ['/v1/admin/staff/:userId', '/admin/staff/:userId'], verifyToken, requireAdmin, admin.deleteStaff);
+
+/* Audit Log */
+mapRoute('get', ['/v1/admin/audit', '/admin/audit'], verifyToken, requireAdmin, admin.getAuditLog);
 
 /* Webhook */
 mapRoute('post', ['/v1/webhooks/stripe', '/webhooks/stripe', '/webhooks/payment', '/api/webhooks/payment'], misc.stripeWebhook);

@@ -294,6 +294,97 @@ async function createTablesPgMem(memDb) {
         `CREATE TABLE settings (
             key VARCHAR(128) PRIMARY KEY,
             value TEXT
+        );`,
+        `CREATE TABLE coupons (
+            id SERIAL PRIMARY KEY,
+            code VARCHAR(64) NOT NULL UNIQUE,
+            discount_type VARCHAR(32) NOT NULL DEFAULT 'PERCENTAGE',
+            discount_value NUMERIC(12, 2) NOT NULL DEFAULT 0,
+            active BOOLEAN NOT NULL DEFAULT TRUE,
+            usage_count INT NOT NULL DEFAULT 0,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );`,
+        `CREATE TABLE content_blocks (
+            id SERIAL PRIMARY KEY,
+            slug VARCHAR(128),
+            type VARCHAR(64) DEFAULT 'BANNER',
+            title VARCHAR(255) NOT NULL,
+            payload TEXT,
+            display_order INT NOT NULL DEFAULT 0,
+            published BOOLEAN NOT NULL DEFAULT TRUE,
+            active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );`,
+        `CREATE TABLE audit_logs (
+            id SERIAL PRIMARY KEY,
+            actor VARCHAR(255) NOT NULL,
+            action VARCHAR(64) NOT NULL,
+            entity_type VARCHAR(64) NOT NULL,
+            entity_id VARCHAR(64),
+            previous_value TEXT,
+            new_value TEXT,
+            ip_address VARCHAR(64),
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );`,
+        `CREATE TABLE hs_code_tax_rates (
+            id SERIAL PRIMARY KEY,
+            hs_code VARCHAR(32) NOT NULL,
+            destination_country VARCHAR(64) NOT NULL,
+            duty_rate NUMERIC(6, 4) NOT NULL DEFAULT 0,
+            tax_rate NUMERIC(6, 4) NOT NULL DEFAULT 0,
+            description TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );`,
+        `CREATE TABLE shipping_rates (
+            id SERIAL PRIMARY KEY,
+            carrier VARCHAR(128) NOT NULL,
+            service_name VARCHAR(128) NOT NULL,
+            country VARCHAR(64) NOT NULL DEFAULT 'CA',
+            base_price NUMERIC(12, 2) NOT NULL DEFAULT 10,
+            per_kg_price NUMERIC(12, 2) NOT NULL DEFAULT 2,
+            active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );`,
+        `CREATE TABLE shipping_origin (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            line1 VARCHAR(255) NOT NULL,
+            line2 VARCHAR(255),
+            city VARCHAR(128) NOT NULL,
+            region VARCHAR(64) NOT NULL,
+            postal_code VARCHAR(32) NOT NULL,
+            country VARCHAR(32) NOT NULL DEFAULT 'CA',
+            phone VARCHAR(64),
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );`,
+        `CREATE TABLE currency_rates (
+            id SERIAL PRIMARY KEY,
+            currency VARCHAR(3) NOT NULL UNIQUE,
+            rate NUMERIC(12, 6) NOT NULL,
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );`,
+        `CREATE TABLE pallet_shipping (
+            id SERIAL PRIMARY KEY,
+            pallet_fee NUMERIC(12, 2) NOT NULL DEFAULT 150,
+            max_weight_kg NUMERIC(12, 2) NOT NULL DEFAULT 1000,
+            enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );`,
+        `CREATE TABLE order_boxes (
+            id SERIAL PRIMARY KEY,
+            order_id INT NOT NULL,
+            box_number INT NOT NULL DEFAULT 1,
+            weight_grams INT NOT NULL DEFAULT 1000,
+            length_cm NUMERIC(8, 2) DEFAULT 20,
+            width_cm NUMERIC(8, 2) DEFAULT 20,
+            height_cm NUMERIC(8, 2) DEFAULT 20,
+            items TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
         );`
     ];
 
@@ -353,6 +444,133 @@ async function runMigrationsRealPg(client) {
         }
     }
 
+    await ensureAllTables(client);
+    await seedAdminAccount();
+    await seedLiveCatalogue(query);
+}
+
+async function ensureAllTables(client) {
+    const tableSqls = [
+        `CREATE TABLE IF NOT EXISTS coupons (
+            id SERIAL PRIMARY KEY,
+            code VARCHAR(64) NOT NULL UNIQUE,
+            discount_type VARCHAR(32) NOT NULL DEFAULT 'PERCENTAGE',
+            discount_value NUMERIC(12, 2) NOT NULL DEFAULT 0,
+            active BOOLEAN NOT NULL DEFAULT TRUE,
+            applicable_groups TEXT[] DEFAULT ARRAY['RETAIL','WHOLESALE','DISTRIBUTOR'],
+            usage_count INT NOT NULL DEFAULT 0,
+            min_order_amount NUMERIC(12, 2) DEFAULT 0,
+            max_discount_amount NUMERIC(12, 2),
+            valid_from TIMESTAMP,
+            valid_to TIMESTAMP,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );`,
+        `CREATE TABLE IF NOT EXISTS reviews (
+            id SERIAL PRIMARY KEY,
+            product_id INT,
+            product_name VARCHAR(300),
+            user_id INT,
+            author_name VARCHAR(128) NOT NULL,
+            rating INT NOT NULL DEFAULT 5,
+            title VARCHAR(200),
+            body TEXT,
+            status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            version BIGINT NOT NULL DEFAULT 0
+        );`,
+        `CREATE TABLE IF NOT EXISTS content_blocks (
+            id SERIAL PRIMARY KEY,
+            slug VARCHAR(128),
+            type VARCHAR(64) DEFAULT 'BANNER',
+            title VARCHAR(255) NOT NULL,
+            payload TEXT,
+            display_order INT NOT NULL DEFAULT 0,
+            published BOOLEAN NOT NULL DEFAULT TRUE,
+            active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );`,
+        `CREATE TABLE IF NOT EXISTS audit_logs (
+            id SERIAL PRIMARY KEY,
+            actor VARCHAR(255) NOT NULL,
+            action VARCHAR(64) NOT NULL,
+            entity_type VARCHAR(64) NOT NULL,
+            entity_id VARCHAR(64),
+            previous_value TEXT,
+            new_value TEXT,
+            ip_address VARCHAR(64),
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );`,
+        `CREATE TABLE IF NOT EXISTS hs_code_tax_rates (
+            id SERIAL PRIMARY KEY,
+            hs_code VARCHAR(32) NOT NULL,
+            destination_country VARCHAR(64) NOT NULL,
+            duty_rate NUMERIC(6, 4) NOT NULL DEFAULT 0,
+            tax_rate NUMERIC(6, 4) NOT NULL DEFAULT 0,
+            description TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );`,
+        `CREATE TABLE IF NOT EXISTS shipping_rates (
+            id SERIAL PRIMARY KEY,
+            carrier VARCHAR(128) NOT NULL,
+            service_name VARCHAR(128) NOT NULL,
+            country VARCHAR(64) NOT NULL DEFAULT 'CA',
+            base_price NUMERIC(12, 2) NOT NULL DEFAULT 10,
+            per_kg_price NUMERIC(12, 2) NOT NULL DEFAULT 2,
+            active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );`,
+        `CREATE TABLE IF NOT EXISTS shipping_origin (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            line1 VARCHAR(255) NOT NULL,
+            line2 VARCHAR(255),
+            city VARCHAR(128) NOT NULL,
+            region VARCHAR(64) NOT NULL,
+            postal_code VARCHAR(32) NOT NULL,
+            country VARCHAR(32) NOT NULL DEFAULT 'CA',
+            phone VARCHAR(64),
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );`,
+        `CREATE TABLE IF NOT EXISTS currency_rates (
+            id SERIAL PRIMARY KEY,
+            currency VARCHAR(3) NOT NULL UNIQUE,
+            rate NUMERIC(12, 6) NOT NULL,
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );`,
+        `CREATE TABLE IF NOT EXISTS pallet_shipping (
+            id SERIAL PRIMARY KEY,
+            pallet_fee NUMERIC(12, 2) NOT NULL DEFAULT 150,
+            max_weight_kg NUMERIC(12, 2) NOT NULL DEFAULT 1000,
+            enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );`,
+        `CREATE TABLE IF NOT EXISTS order_boxes (
+            id SERIAL PRIMARY KEY,
+            order_id INT NOT NULL,
+            box_number INT NOT NULL DEFAULT 1,
+            weight_grams INT NOT NULL DEFAULT 1000,
+            length_cm NUMERIC(8, 2) DEFAULT 20,
+            width_cm NUMERIC(8, 2) DEFAULT 20,
+            height_cm NUMERIC(8, 2) DEFAULT 20,
+            items JSONB,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );`
+    ];
+
+    for (const sql of tableSqls) {
+        try {
+            await client.query(sql);
+        } catch (e) {
+            console.warn('[Database] Table init notice:', e.message);
+        }
+    }
+
     try {
         await client.query(`
             ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_provider_ref VARCHAR(255);
@@ -360,11 +578,60 @@ async function runMigrationsRealPg(client) {
             ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_method VARCHAR(255);
             ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_number VARCHAR(255);
             ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_url VARCHAR(500);
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS company_name VARCHAR(255);
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS tax_id VARCHAR(255);
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS business_licence_ref VARCHAR(255);
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT TRUE;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS requested_group VARCHAR(32);
         `);
     } catch (e) {}
 
-    await seedAdminAccount();
-    await seedLiveCatalogue(query);
+    // Seed default coupons if none exist
+    try {
+        const cRes = await client.query('SELECT COUNT(*) FROM coupons');
+        if (parseInt(cRes.rows[0].count, 10) === 0) {
+            await client.query(`
+                INSERT INTO coupons (code, discount_type, discount_value, active, applicable_groups, usage_count)
+                VALUES 
+                    ('WELCOME10', 'PERCENTAGE', 10, TRUE, ARRAY['RETAIL','WHOLESALE','DISTRIBUTOR'], 0),
+                    ('FREESHIP', 'FREE_SHIPPING', 0, TRUE, ARRAY['RETAIL'], 0);
+            `);
+        }
+    } catch (e) {}
+
+    // Seed default currency rates
+    try {
+        await client.query(`
+            INSERT INTO currency_rates (currency, rate, updated_at)
+            VALUES 
+                ('CAD', 1.0, NOW()),
+                ('USD', 0.74, NOW()),
+                ('ILS', 2.72, NOW())
+            ON CONFLICT (currency) DO NOTHING;
+        `);
+    } catch (e) {}
+
+    // Seed default shipping origin
+    try {
+        const oRes = await client.query('SELECT COUNT(*) FROM shipping_origin');
+        if (parseInt(oRes.rows[0].count, 10) === 0) {
+            await client.query(`
+                INSERT INTO shipping_origin (name, line1, city, region, postal_code, country, phone)
+                VALUES ('Ottawa Central Warehouse', '300 Greenbank Rd', 'Ottawa', 'ON', 'K2H 0B6', 'CA', '16138547777');
+            `);
+        }
+    } catch (e) {}
+
+    // Seed default pallet shipping
+    try {
+        const pRes = await client.query('SELECT COUNT(*) FROM pallet_shipping');
+        if (parseInt(pRes.rows[0].count, 10) === 0) {
+            await client.query(`
+                INSERT INTO pallet_shipping (pallet_fee, max_weight_kg, enabled)
+                VALUES (150.00, 1000.00, TRUE);
+            `);
+        }
+    } catch (e) {}
 }
 
 async function runMigrationsPgMem(memDb) {
