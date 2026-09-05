@@ -20,6 +20,17 @@ echo " 3. Applying Kubernetes Manifests"
 echo "=================================================="
 sudo k3s kubectl apply -f deploy/k8s/00-namespace.yaml
 sudo k3s kubectl apply -f deploy/k8s/01-backend-config.yaml
+
+# Create the DB credentials Secret if it doesn't already exist
+if ! sudo k3s kubectl get secret watani-db-credentials -n watani &>/dev/null; then
+    echo "Creating watani-db-credentials Secret..."
+    sudo k3s kubectl create secret generic watani-db-credentials \
+        --from-literal=SPRING_DATASOURCE_USERNAME=postgres \
+        --from-literal=SPRING_DATASOURCE_PASSWORD=admin \
+        --from-literal=JWT_SECRET="${JWT_SECRET:-watani-jwt-secret-change-me-$(openssl rand -hex 16)}" \
+        -n watani --dry-run=client -o yaml | sudo k3s kubectl apply -f -
+fi
+
 sudo k3s kubectl apply -f deploy/k8s/02-backend.yaml
 sudo k3s kubectl apply -f deploy/k8s/03-frontend.yaml
 sudo k3s kubectl apply -f deploy/k8s/04-ingress.yaml
