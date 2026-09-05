@@ -43,6 +43,7 @@ echo " 2. Building Node.js Backend Image"
 echo "=================================================="
 docker build -t watani-b2c-service:v1 ./watani-b2c-service
 echo "Importing backend image into k3s containerd..."
+sudo k3s ctr -n k8s.io images rm docker.io/library/watani-b2c-service:v1 2>/dev/null || true
 docker save watani-b2c-service:v1 | sudo k3s ctr -n k8s.io images import -
 echo "Backend image ready."
 
@@ -55,6 +56,7 @@ echo " 3. Building Next.js Website Image"
 echo "=================================================="
 docker build -t watani-b2c-website:v1 ./watani-b2c-website
 echo "Importing website image into k3s containerd..."
+sudo k3s ctr -n k8s.io images rm docker.io/library/watani-b2c-website:v1 2>/dev/null || true
 docker save watani-b2c-website:v1 | sudo k3s ctr -n k8s.io images import -
 echo "Website image ready."
 
@@ -124,18 +126,17 @@ while [ $ELAPSED -lt $DEADLINE ]; do
         break
     fi
 
-    # Show events and logs for any non-Running pod
-    NON_RUNNING=$(sudo k3s kubectl get pods -n watani \
-        --field-selector='status.phase!=Running' \
-        -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || true)
+    # Show events and logs for any unready pod (e.g. 0/1, CrashLoopBackOff, Pending)
+    UNREADY_PODS=$(sudo k3s kubectl get pods -n watani --no-headers 2>/dev/null | awk '{split($2, a, "/"); if (a[1] != a[2] || a[1] == "0") print $1}' || true)
 
-    if [ -n "$NON_RUNNING" ]; then
-        for POD in $NON_RUNNING; do
+    if [ -n "$UNREADY_PODS" ]; then
+        for POD in $UNREADY_PODS; do
             echo ""
-            echo "  Events for $POD:"
+            echo "  [Unready Pod: $POD]"
+            echo "  Recent Events:"
             sudo k3s kubectl describe pod "$POD" -n watani 2>/dev/null \
-                | grep -A 5 "Events:" | tail -8 || true
-            echo "  Last 20 log lines for $POD:"
+                | grep -A 8 "Events:" | tail -8 || true
+            echo "  Last 20 log lines:"
             sudo k3s kubectl logs "$POD" -n watani --tail=20 2>/dev/null \
                 | sed 's/^/    /' || true
         done
