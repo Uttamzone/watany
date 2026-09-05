@@ -17,8 +17,8 @@ import {motion, useReducedMotion} from "framer-motion";
 
 const faqs = [
     {
-        q: "Does Watani & Sons Corp sell to individual consumers?",
-        a: "Watani & Sons Corp focuses on wholesale, distribution, bulk purchasing and Amanat services. For regular consumer quantities and home-delivery shopping, visit WatanyPalestinianProducts.com.",
+        q: "Who can shop with Watani & Sons Corp?",
+        a: "We serve three types of customers: Regular Retail shoppers (buying individual and family units with no minimum order requirement), Wholesale & Bulk Buyers (businesses and organizations buying by the case or box), and Distributors (buying by the pallet with dedicated LTL freight and terms).",
     },
     {
         q: "What products are available for wholesale & bulk order?",

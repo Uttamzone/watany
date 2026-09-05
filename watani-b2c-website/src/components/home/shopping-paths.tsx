@@ -35,29 +35,28 @@ type Path = {
 const paths: Path[] = [
     {
         index: "01",
-        title: "Bulk Buyers",
-        copy: "For families, events, community groups and organizations that want larger quantities at better value.",
-        points: ["No account required", "Case & multi-unit sizes", "Event and community volumes"],
-        cta: "Shop bulk",
+        title: "Retail Shoppers",
+        copy: "For individual customers and families looking for authentic Palestinian olive oil, dates, za'atar, and artisanal goods.",
+        points: ["Individual & household sizes", "No minimum order requirement", "Direct home delivery"],
+        cta: "Shop retail",
         href: "/categories",
     },
     {
         index: "02",
-        title: "Wholesale & Distributors",
-        copy: "For grocery stores, restaurants, retailers and distributors. Login or apply for a business account.",
-        points: ["Tiered business pricing", "Case & pallet quantities", "Dedicated account access"],
+        title: "Wholesale & Bulk Buyers",
+        copy: "For distributors, retailers, businesses, and organizations buying by the case or box.",
+        points: ["Wholesale pricing", "Case & box quantities", "For resale or bulk use"],
         cta: "Wholesale login",
         href: "/login",
         emphasis: true,
         image: "/images/services/wholesale.webp",
     },
     {
-        // Amanat isn't launched yet: no href, so this renders as an inert card
-        // with a "Coming soon" badge instead of a dead link.
+        // Amanat & distributor logistics
         index: "03",
-        title: "Amanat Shipping",
-        copy: "Send olive oil, cheese, olives and eligible family products from Palestine to destinations worldwide.",
-        points: ["Drop off in Palestine", "Consolidated freight", "Pick up locally, or Door2Door service"],
+        title: "Distributor & Amanat Shipping",
+        copy: "For high-volume distributors buying by the pallet with flexible payment terms, plus cargo shipping from Palestine.",
+        points: ["Pallet LTL freight rates", "Cheque & e-Transfer options", "Amanat cargo & consolidated freight"],
         cta: "Coming soon",
     },
 ];
@@ -89,7 +88,7 @@ export function ShoppingPaths() {
                     Choose how you want to shop
                 </h2>
                 <p className="mt-4 text-[15px] leading-relaxed text-muted sm:text-[17px]">
-                    Wholesale & Bulk Palestinian Products + Amanat Shipping Services
+                    Retail, Wholesale &amp; Bulk Palestinian Products + Amanat Shipping Services
                 </p>
             </motion.div>
 

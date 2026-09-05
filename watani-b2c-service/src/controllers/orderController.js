@@ -39,6 +39,13 @@ async function reconcileStripePaymentIfPending(order, req) {
                 newValue: { status: 'PROCESSING', paymentStatus: 'PAID', stripeSession: session.id },
                 req
             });
+
+            try {
+                const { dispatchInvoiceEmailForOrder } = require('../services/emailService');
+                dispatchInvoiceEmailForOrder(order.id, db).catch(e => console.warn('[Invoice Email]:', e.message));
+            } catch (emailErr) {
+                console.warn('[Invoice Email Error]:', emailErr.message);
+            }
         }
     } catch (err) {
         console.warn('[Stripe session check error]:', err.message);

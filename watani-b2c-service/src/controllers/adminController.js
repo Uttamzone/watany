@@ -843,6 +843,13 @@ async function markOrderPaid(req, res) {
             newValue: { paymentStatus: 'PAID', status: 'PROCESSING', reference }
         });
 
+        try {
+            const { dispatchInvoiceEmailForOrder } = require('../services/emailService');
+            dispatchInvoiceEmailForOrder(rows[0].order_number, db).catch(e => console.warn('[Invoice Email Mark Paid]:', e.message));
+        } catch (emailErr) {
+            console.warn('[Invoice Email Mark Paid Error]:', emailErr.message);
+        }
+
         const itemsRes = await db.query('SELECT * FROM order_items WHERE order_id = $1', [rows[0].id]);
         return res.json(formatOrderRow(rows[0], itemsRes.rows));
     } catch (err) {

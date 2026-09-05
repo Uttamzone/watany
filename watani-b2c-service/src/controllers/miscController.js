@@ -155,13 +155,21 @@ async function stripeWebhook(req, res) {
                     newValue: { status: 'PROCESSING', paymentStatus: 'PAID', paymentRef },
                     req
                 });
+
+                try {
+                    const { dispatchInvoiceEmailForOrder } = require('../services/emailService');
+                    dispatchInvoiceEmailForOrder(orderNumber, db).catch(e => console.warn('[Invoice Email Webhook]:', e.message));
+                } catch (emailErr) {
+                    console.warn('[Invoice Email Webhook Error]:', emailErr.message);
+                }
             } else if (paymentRef) {
-                await db.query(`
+                const updatedRes = await db.query(`
                     UPDATE orders
                     SET status = 'PROCESSING',
                         payment_status = 'PAID',
                         updated_at = NOW()
-                    WHERE payment_provider_ref = $1;
+                    WHERE payment_provider_ref = $1
+                    RETURNING order_number;
                 `, [paymentRef]);
 
                 await logAudit({
@@ -172,6 +180,13 @@ async function stripeWebhook(req, res) {
                     newValue: { status: 'PROCESSING', paymentStatus: 'PAID' },
                     req
                 });
+
+                if (updatedRes.rows.length > 0) {
+                    try {
+                        const { dispatchInvoiceEmailForOrder } = require('../services/emailService');
+                        dispatchInvoiceEmailForOrder(updatedRes.rows[0].order_number, db).catch(e => console.warn('[Invoice Email Webhook]:', e.message));
+                    } catch (e) {}
+                }
             }
         } else if (
             eventType === 'charge.failed' ||

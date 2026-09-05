@@ -2,6 +2,7 @@ const db = require('../db');
 const { resolvePrice } = require('../services/pricing');
 const { getFreightcomQuotes } = require('../services/freightcom');
 const { logAudit } = require('../services/auditService');
+const { dispatchInvoiceEmailForOrder } = require('../services/emailService');
 
 async function getQuote(req, res) {
     try {
@@ -22,7 +23,7 @@ async function getQuote(req, res) {
         }
 
         let query = `
-            SELECT ci.quantity, v.id as variant_id, v.sku, p.name as product_name
+            SELECT ci.quantity, v.id as variant_id, v.sku, v.unit, v.weight_grams, p.name as product_name
             FROM cart_items ci
             JOIN product_variants v ON ci.variant_id = v.id
             JOIN products p ON v.product_id = p.id
@@ -41,6 +42,21 @@ async function getQuote(req, res) {
         if (params.length > 0) {
             const result = await db.query(query, params);
             items = result.rows;
+        }
+
+        if (items.length === 0 && Array.isArray(req.body.items) && req.body.items.length > 0) {
+            for (const it of req.body.items) {
+                const vId = it.variantId || it.id;
+                const { rows: vRows } = await db.query(`
+                    SELECT v.id as variant_id, v.sku, v.unit, v.weight_grams, p.name as product_name
+                    FROM product_variants v
+                    JOIN products p ON v.product_id = p.id
+                    WHERE v.id = $1
+                `, [vId]);
+                if (vRows.length > 0) {
+                    items.push({ ...vRows[0], quantity: it.quantity || 1 });
+                }
+            }
         }
 
         let subtotal = 0;
@@ -66,7 +82,7 @@ async function getQuote(req, res) {
         }
 
         const destObj = destination || { postalCode, region: province, country };
-        const options = await getFreightcomQuotes(destObj, subtotal);
+        const options = await getFreightcomQuotes(destObj, subtotal, items);
 
         const selectedOption = options[0] || {};
         const standardCost = selectedOption.cost || 30.00;
@@ -140,14 +156,14 @@ async function createIntent(req, res) {
         let items = [];
         if (activeCartId) {
             const { rows } = await db.query(`
-                SELECT ci.quantity, v.id as variant_id, v.sku, v.unit, p.name as product_name, p.slug as product_slug,
+                SELECT ci.quantity, v.id as variant_id, v.sku, v.unit, v.weight_grams, p.name as product_name, p.slug as product_slug,
                        MIN(pi.url) as image_url
                 FROM cart_items ci
                 JOIN product_variants v ON ci.variant_id = v.id
                 JOIN products p ON v.product_id = p.id
                 LEFT JOIN product_images pi ON pi.product_id = p.id
                 WHERE ci.cart_id = $1
-                GROUP BY ci.id, ci.quantity, v.id, v.sku, v.unit, p.id, p.name, p.slug;
+                GROUP BY ci.id, ci.quantity, v.id, v.sku, v.unit, v.weight_grams, p.id, p.name, p.slug;
             `, [activeCartId]);
             items = rows;
         }
@@ -156,13 +172,13 @@ async function createIntent(req, res) {
             for (const it of req.body.items) {
                 const vId = it.variantId || it.id;
                 const { rows: vRows } = await db.query(`
-                    SELECT v.id as variant_id, v.sku, v.unit, p.name as product_name, p.slug as product_slug,
+                    SELECT v.id as variant_id, v.sku, v.unit, v.weight_grams, p.name as product_name, p.slug as product_slug,
                            MIN(pi.url) as image_url
                     FROM product_variants v
                     JOIN products p ON v.product_id = p.id
                     LEFT JOIN product_images pi ON pi.product_id = p.id
                     WHERE v.id = $1
-                    GROUP BY v.id, v.sku, v.unit, p.name, p.slug
+                    GROUP BY v.id, v.sku, v.unit, v.weight_grams, p.name, p.slug
                 `, [vId]);
                 if (vRows.length > 0) {
                     items.push({ ...vRows[0], quantity: it.quantity || 1 });
@@ -172,6 +188,17 @@ async function createIntent(req, res) {
 
         if (items.length === 0) {
             return res.status(400).json({ error: 'Bad Request', message: 'Cart is empty' });
+        }
+
+        const isStripe = (paymentMethod || '').toUpperCase() === 'STRIPE';
+
+        // Restrict non-Stripe payments (e-Transfer, Cheque) EXCLUSIVELY to DISTRIBUTOR buyer group.
+        // Retail and Wholesale customers must pay via Stripe to process their order.
+        if (!isStripe && buyerGroup !== 'DISTRIBUTOR') {
+            return res.status(403).json({
+                error: 'Payment Required',
+                message: 'Retail and Wholesale orders require card payment via Stripe. e-Transfer and Cheque orders are reserved exclusively for authorized Distributors.'
+            });
         }
 
         let subtotal = 0;
@@ -197,39 +224,36 @@ async function createIntent(req, res) {
             });
         }
 
-        // Determine shipping cost and method dynamically based on shippingServiceCode and configured flat rate ($30.00)
-        const baseRate = parseFloat(process.env.SHIPPING_FLAT_RATE || '30.00');
-        let shippingTotal = baseRate;
-        let carrierName = 'Freightcom Direct';
-        let shippingMethod = 'Freightcom Standard Shipping';
+        // Determine shipping cost and carrier dynamically based on Freightcom rates and pallet calculation
+        const destObj = {
+            line1: shippingAddress ? shippingAddress.line1 : '',
+            city: shippingAddress ? shippingAddress.city : '',
+            region: shippingAddress ? (shippingAddress.region || 'ON').toUpperCase() : 'ON',
+            postalCode: shippingAddress ? shippingAddress.postalCode : '',
+            country: shippingAddress ? (shippingAddress.country || 'CA').toUpperCase() : 'CA'
+        };
 
-        if (shippingServiceCode === 'FREIGHTCOM_EXPRESS') {
-            shippingTotal = Math.round(baseRate * 1.5 * 100) / 100;
-            carrierName = 'Freightcom Express Priority';
-            shippingMethod = 'Freightcom Express Shipping';
-        } else if (shippingServiceCode === 'PICKUP') {
-            shippingTotal = 0;
-            carrierName = 'Watani Hub';
-            shippingMethod = 'Warehouse Pickup';
-        } else {
-            // FREIGHTCOM_STANDARD
-            shippingTotal = subtotal > 150 ? 0 : baseRate;
-            carrierName = 'Freightcom Direct';
-            shippingMethod = 'Freightcom Standard Shipping';
+        const shippingQuotes = await getFreightcomQuotes(destObj, subtotal, items);
+        let selectedQuote = shippingQuotes.find(q => q.serviceCode === shippingServiceCode);
+        if (!selectedQuote) {
+            selectedQuote = shippingQuotes[0] || {
+                cost: parseFloat(process.env.SHIPPING_FLAT_RATE || '30.00'),
+                carrierName: 'Freightcom Direct',
+                serviceName: 'Freightcom Standard Shipping',
+                taxRate: 0.13
+            };
         }
 
-        const region = shippingAddress ? (shippingAddress.region || 'ON').toUpperCase() : 'ON';
-        let taxRate = 0.13;
-        if (region === 'QC') taxRate = 0.14975;
-        else if (region === 'BC') taxRate = 0.12;
-        else if (region === 'AB') taxRate = 0.05;
+        const shippingTotal = selectedQuote.cost;
+        const carrierName = selectedQuote.carrierName;
+        const shippingMethod = selectedQuote.serviceName;
 
+        const taxRate = selectedQuote.taxRate !== undefined ? selectedQuote.taxRate : 0.13;
         const taxTotal = Math.round(subtotal * taxRate * 100) / 100;
         const grandTotal = Math.round((subtotal + shippingTotal + taxTotal) * 100) / 100;
 
         const orderNumber = 'WAT-' + Date.now().toString(36).toUpperCase() + '-' + Math.floor(Math.random() * 1000);
 
-        const isStripe = (paymentMethod || '').toUpperCase() === 'STRIPE';
         const initialStatus = isStripe ? 'PENDING_PAYMENT' : 'AWAITING_PAYMENT_VERIFICATION';
         const initialPaymentStatus = 'PENDING';
 
@@ -277,8 +301,15 @@ async function createIntent(req, res) {
         }
 
         // Deactivate cart immediately for non-Stripe orders; for Stripe, cart is deactivated once payment is confirmed
-        if (paymentMethod.toUpperCase() !== 'STRIPE' && activeCartId) {
+        if (!isStripe && activeCartId) {
             await db.query('UPDATE carts SET active = FALSE WHERE id = $1', [activeCartId]);
+        }
+
+        // For distributor orders placed via e-Transfer or Cheque, dispatch pro-forma notification email to customer & Watani group
+        if (!isStripe) {
+            dispatchInvoiceEmailForOrder(orderNumber, db, true).catch(e => {
+                console.error('[createIntent] Failed to dispatch distributor pro-forma invoice:', e.message);
+            });
         }
 
         await logAudit({

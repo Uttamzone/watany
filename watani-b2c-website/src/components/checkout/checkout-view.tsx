@@ -147,8 +147,7 @@ export function CheckoutView() {
     const [paymentMethodInput, setPaymentMethod] = useState<PaymentMethod>("STRIPE");
 
     const canUseManualPayment =
-        status === "authenticated" &&
-        (user?.pricingGroup === "WHOLESALE" || user?.pricingGroup === "DISTRIBUTOR");
+        status === "authenticated" && user?.pricingGroup === "DISTRIBUTOR";
 
     // Derived, not corrected via an effect: an effect let an ineligible account's
     // non-Stripe choice survive one render, during which pay() would have submitted it.
@@ -359,7 +358,11 @@ export function CheckoutView() {
 
         setQuoting(true);
         try {
-            const options = await getShippingQuotes(address);
+            const cartItems = lines.map((l) => ({
+                variantId: l.variantId,
+                quantity: l.quantity,
+            }));
+            const options = await getShippingQuotes(address, cartItems);
             setQuotes(options);
             setServiceCode(options[0]?.serviceCode ?? null);
             setStep("shipping");
@@ -386,6 +389,10 @@ export function CheckoutView() {
                 customerNote: note || undefined,
                 idempotencyKey,
                 paymentMethod,
+                items: lines.map((l) => ({
+                    variantId: l.variantId,
+                    quantity: l.quantity,
+                })),
             });
 
             if (result.redirectUrl) {
@@ -691,17 +698,29 @@ export function CheckoutView() {
                                             className="size-4"
                                         />
                                         <span className="flex-1">
-                      <span className="block text-[15px] font-bold text-teal-950">
-                        {quote.serviceName}
-                      </span>
-                      <span className="block text-[13px] text-muted">
-                        {quote.carrierName}
-                          {formatEta(quote)}
-                      </span>
-                    </span>
+                                            <span className="flex flex-wrap items-center gap-2">
+                                                <span className="block text-[15px] font-bold text-teal-950">
+                                                    {quote.serviceName}
+                                                </span>
+                                                {quote.packagingType === "PALLET" && (
+                                                    <span className="inline-block rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-extrabold text-amber-900 uppercase tracking-wide">
+                                                        40&quot;&times;48&quot; Pallet Freight
+                                                    </span>
+                                                )}
+                                            </span>
+                                            <span className="block text-[13px] text-muted">
+                                                {quote.carrierName}
+                                                {formatEta(quote)}
+                                            </span>
+                                            {quote.packagingType === "PALLET" && quote.palletDimensions && (
+                                                <span className="mt-1 block text-[12px] font-medium text-teal-900/80">
+                                                    Pallet: {quote.palletDimensions} {quote.boxCount ? `\u2022 ${quote.boxCount} boxes` : ""} {quote.totalWeightKg ? `\u2022 ${quote.totalWeightKg} kg` : ""}
+                                                </span>
+                                            )}
+                                        </span>
                                         <span className="text-[15px] font-extrabold text-teal-950">
-                      {quote.cost === 0 ? "Free" : format(quote.cost)}
-                    </span>
+                                            {quote.cost === 0 ? "Free" : format(quote.cost)}
+                                        </span>
                                     </label>
                                 </li>
                             ))}
@@ -710,8 +729,11 @@ export function CheckoutView() {
                         {canUseManualPayment && (
                             <div className="mt-6">
                                 <h3 className="text-[15px] font-extrabold text-teal-950">
-                                    Payment method
+                                    Distributor Payment Option
                                 </h3>
+                                <p className="mt-1 text-[13px] text-muted">
+                                    Distributors can place orders without immediate card payment. You can select e-Transfer or Cheque, and our team will approve the order upon payment verification.
+                                </p>
                                 <ul className="mt-3 space-y-3">
                                     {(
                                         [
@@ -732,8 +754,8 @@ export function CheckoutView() {
                                                     className="size-4"
                                                 />
                                                 <span className="text-[15px] font-bold text-teal-950">
-                          {option.label}
-                        </span>
+                                                    {option.label}
+                                                </span>
                                             </label>
                                         </li>
                                     ))}
@@ -742,14 +764,13 @@ export function CheckoutView() {
                                 {paymentMethod === "E_TRANSFER" && (
                                     <p className="mt-3 rounded-[14px] bg-white p-4 text-[13px] leading-relaxed text-teal-950">
                                         Send your e-transfer to: <strong>Wattany@yahoo.com</strong>.
-                                        Your order will ship once we confirm receipt.
+                                        Your order will be placed immediately and approved once Watani administration confirms receipt.
                                     </p>
                                 )}
                                 {paymentMethod === "CHEQUE" && (
                                     <p className="mt-3 rounded-[14px] bg-white p-4 text-[13px] leading-relaxed text-teal-950">
                                         Make the cheque payable to:{" "}
-                                        <strong>Watani &amp; Sons Corp</strong>. Your order will ship
-                                        once we confirm receipt.
+                                        <strong>Watani &amp; Sons Corp</strong>. Your order will be placed immediately and approved once Watani administration confirms receipt.
                                     </p>
                                 )}
                             </div>

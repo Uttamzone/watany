@@ -805,6 +805,7 @@ async function ensureAllTables(client) {
             ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_method VARCHAR(255);
             ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_number VARCHAR(255);
             ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_url VARCHAR(500);
+            ALTER TABLE orders ADD COLUMN IF NOT EXISTS invoice_email_sent BOOLEAN DEFAULT FALSE;
             ALTER TABLE users ADD COLUMN IF NOT EXISTS company_name VARCHAR(255);
             ALTER TABLE users ADD COLUMN IF NOT EXISTS tax_id VARCHAR(255);
             ALTER TABLE users ADD COLUMN IF NOT EXISTS business_licence_ref VARCHAR(255);

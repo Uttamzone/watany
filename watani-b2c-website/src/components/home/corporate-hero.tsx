@@ -122,8 +122,8 @@ export function CorporateHero() {
                         variants={child}
                         className="max-w-[16ch] text-[29px] font-extrabold leading-[1.06] sm:max-w-[24ch] sm:text-[40px] lg:max-w-[26ch] lg:text-[46px]"
                     >
-                        Palestinian wholesale,{" "}
-                        <span className="text-lime-400">bulk buying</span> &amp; Amanat
+                        Palestinian retail,{" "}
+                        <span className="text-lime-400">wholesale &amp; bulk</span> &amp; Amanat
                         shipping
                     </motion.h1>
 

@@ -93,6 +93,10 @@ export type ShippingOption = {
     exemptAmount: number;
     /** Tax charged on taxableAmount plus this option's own shipping charge. */
     taxAmount: number;
+    packagingType?: "PALLET" | "PARCEL";
+    palletDimensions?: string;
+    totalWeightKg?: number;
+    boxCount?: number;
 };
 
 /** In-house static shipping service codes, mirroring CheckoutService. */
@@ -169,6 +173,7 @@ export type CheckoutPayload = {
     idempotencyKey: string;
     /** Defaults to STRIPE server-side when omitted. E_TRANSFER/CHEQUE require a wholesale/distributor account. */
     paymentMethod?: PaymentMethod;
+    items?: any[];
 };
 
 function cartHeaders(): HeadersInit {
@@ -444,12 +449,13 @@ function createMockOrder(orderNumber: string, email: string, payload?: CheckoutP
 /** Live shipping options for a destination (F-SHP-1, F-SHP-4). */
 export async function getShippingQuotes(
     destination: Address,
+    items?: any[],
 ): Promise<ShippingOption[]> {
     try {
         const res = await apiFetch<any>("/api/checkout/shipping-quotes", {
             method: "POST",
             headers: cartHeaders(),
-            body: JSON.stringify({destination}),
+            body: JSON.stringify({destination, items}),
         });
         if (Array.isArray(res) && res.length > 0) {
             return res;
@@ -462,10 +468,14 @@ export async function getShippingQuotes(
                 serviceName: opt.serviceName || opt.name || "Freightcom Standard Shipping",
                 cost: typeof opt.cost === "number" ? opt.cost : parseFloat(opt.cost || "0"),
                 etaDays: opt.etaDays ?? 4,
-                taxRate,
+                taxRate: opt.taxRate || taxRate,
                 taxableAmount: opt.taxableAmount || 0,
                 exemptAmount: 0,
                 taxAmount: opt.taxAmount || 0,
+                packagingType: opt.packagingType,
+                palletDimensions: opt.palletDimensions || opt.dimensions,
+                totalWeightKg: opt.totalWeightKg,
+                boxCount: opt.boxCount,
             }));
         }
     } catch {}
