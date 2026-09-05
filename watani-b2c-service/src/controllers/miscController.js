@@ -75,7 +75,11 @@ async function stripeWebhook(req, res) {
     // This is required for Stripe signature verification.
     const rawPayload = Buffer.isBuffer(req.body) ? req.body : (req.rawBody || Buffer.from(JSON.stringify(req.body)));
 
-    const stripeKey = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_API_KEY;
+    let rawKey = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_API_KEY || '';
+    let stripeKey = String(rawKey).trim();
+    while ((stripeKey.startsWith('"') && stripeKey.endsWith('"')) || (stripeKey.startsWith("'") && stripeKey.endsWith("'"))) {
+        stripeKey = stripeKey.slice(1, -1).trim();
+    }
 
     let event;
 

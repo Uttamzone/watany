@@ -297,13 +297,38 @@ async function createIntent(req, res) {
             placedAt: new Date().toISOString()
         };
 
-        const stripeKey = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_API_KEY;
+        let rawKey = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_API_KEY || '';
+        let stripeKey = String(rawKey).trim();
+        while ((stripeKey.startsWith('"') && stripeKey.endsWith('"')) || (stripeKey.startsWith("'") && stripeKey.endsWith("'"))) {
+            stripeKey = stripeKey.slice(1, -1).trim();
+        }
 
         if (isStripe) {
-            if (!stripeKey || stripeKey.includes('YOUR_STRIPE') || stripeKey.trim() === '') {
+            if (!stripeKey || stripeKey.includes('YOUR_STRIPE') || stripeKey === '') {
                 return res.status(400).json({
                     error: 'Payment Configuration Error',
-                    message: 'Stripe Live Secret Key is not configured on the server. Please select an alternative payment method or contact support.'
+                    message: 'Stripe Secret Key is not configured on the server. Please run: ./set-stripe-key.sh sk_live_... on the server.'
+                });
+            }
+
+            if (stripeKey.startsWith('pk_')) {
+                return res.status(400).json({
+                    error: 'Invalid Stripe Key Type',
+                    message: `Invalid Stripe key: You configured a Publishable Key (${stripeKey.slice(0, 10)}...). Server checkout requires your Stripe Secret Key (starts with sk_live_ or sk_test_) or Restricted Key (rk_...). Update it on the server using: ./set-stripe-key.sh sk_live_...`
+                });
+            }
+
+            if (stripeKey.startsWith('whsec_')) {
+                return res.status(400).json({
+                    error: 'Invalid Stripe Key Type',
+                    message: `Invalid Stripe key: You configured a Webhook Signing Secret (${stripeKey.slice(0, 10)}...). Webhook secrets are only for verifying incoming webhooks. Checkout requires your Stripe Secret Key (starts with "sk_live_" or "sk_test_"). Please find it in Stripe Dashboard -> Developers -> API keys and update it on the server using: ./set-stripe-key.sh sk_live_...`
+                });
+            }
+
+            if (!stripeKey.startsWith('sk_') && !stripeKey.startsWith('rk_')) {
+                return res.status(400).json({
+                    error: 'Invalid Stripe Key Format',
+                    message: `Invalid Stripe key format: Key starts with "${stripeKey.slice(0, 7)}...". Stripe Secret Keys must start with "sk_live_" or "sk_test_". Update it on the server using: ./set-stripe-key.sh sk_live_...`
                 });
             }
 
@@ -376,9 +401,13 @@ async function createIntent(req, res) {
                 });
             } catch (stripeErr) {
                 console.error('[Stripe Session Error]:', stripeErr);
+                let userMsg = stripeErr.message || 'Failed to initiate Stripe Checkout session. Please try again.';
+                if (userMsg.toLowerCase().includes('invalid api key') || userMsg.toLowerCase().includes('invalid key')) {
+                    userMsg = `Stripe rejected the secret key (${stripeKey.slice(0, 8)}...): ${stripeErr.message}. Please verify the key in Stripe Dashboard -> Developers -> API keys and update it on the server using: ./set-stripe-key.sh sk_live_...`;
+                }
                 return res.status(400).json({
                     error: 'Stripe Checkout Error',
-                    message: stripeErr.message || 'Failed to initiate Stripe Checkout session. Please try again.'
+                    message: userMsg
                 });
             }
         }
