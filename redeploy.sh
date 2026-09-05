@@ -2,29 +2,21 @@
 set -euo pipefail
 
 echo "=================================================="
-echo " 1. Clearing Old Deployments & Pods"
-echo "=================================================="
-sudo k3s kubectl delete deployment watani-b2c-service watani-b2c-website -n watani --ignore-not-found=true
-sudo k3s kubectl delete pod -n watani --all --grace-period=0 --force || true
-
-echo "=================================================="
-echo " 2. Building Node.js Backend Image"
+echo " 1. Building Node.js Backend Image"
 echo "=================================================="
 docker build -t watani-b2c-service:v1 ./watani-b2c-service
-docker save watani-b2c-service:v1 -o backend.tar
-sudo k3s ctr -n k8s.io images import backend.tar
-rm -f backend.tar
+echo "Importing backend image into k3s containerd..."
+docker save watani-b2c-service:v1 | sudo k3s ctr -n k8s.io images import -
 
 echo "=================================================="
-echo " 3. Building Next.js Website Image"
+echo " 2. Building Next.js Website Image"
 echo "=================================================="
 docker build -t watani-b2c-website:v1 ./watani-b2c-website
-docker save watani-b2c-website:v1 -o website.tar
-sudo k3s ctr -n k8s.io images import website.tar
-rm -f website.tar
+echo "Importing website image into k3s containerd..."
+docker save watani-b2c-website:v1 | sudo k3s ctr -n k8s.io images import -
 
 echo "=================================================="
-echo " 4. Applying Manifests (/api/health Probe)"
+echo " 3. Applying Kubernetes Manifests"
 echo "=================================================="
 sudo k3s kubectl apply -f deploy/k8s/00-namespace.yaml
 sudo k3s kubectl apply -f deploy/k8s/01-backend-config.yaml
@@ -33,10 +25,16 @@ sudo k3s kubectl apply -f deploy/k8s/03-frontend.yaml
 sudo k3s kubectl apply -f deploy/k8s/04-ingress.yaml
 
 echo "=================================================="
-echo " 5. Waiting for Services to become Ready"
+echo " 4. Triggering Clean Deployment Rollout"
 echo "=================================================="
-sudo k3s kubectl rollout status deployment/watani-b2c-service -n watani --timeout=120s
-sudo k3s kubectl rollout status deployment/watani-b2c-website -n watani --timeout=120s
+sudo k3s kubectl rollout restart deployment/watani-b2c-service -n watani
+sudo k3s kubectl rollout restart deployment/watani-b2c-website -n watani
+
+echo "=================================================="
+echo " 5. Waiting for Services to become Ready (5m max)"
+echo "=================================================="
+sudo k3s kubectl rollout status deployment/watani-b2c-service -n watani --timeout=300s
+sudo k3s kubectl rollout status deployment/watani-b2c-website -n watani --timeout=300s
 
 echo "=================================================="
 echo " 6. Syncing Uploaded Media Assets"
@@ -50,6 +48,6 @@ if [ -n "$POD_NAME" ] && [ -d "watani-b2c-website/public/uploads" ]; then
 fi
 
 echo "=================================================="
-echo " Redeployment Complete! Live Pods:"
+echo " Redeployment Complete! Cluster Status:"
 echo "=================================================="
-sudo k3s kubectl get pods -n watani
+sudo k3s kubectl get pods -n watani -o wide

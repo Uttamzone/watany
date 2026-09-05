@@ -29,7 +29,8 @@ const config = {
     user: process.env.SPRING_DATASOURCE_USERNAME || process.env.PGUSER || (jdbcParsed && jdbcParsed.user) || 'postgres',
     password: process.env.SPRING_DATASOURCE_PASSWORD || process.env.PGPASSWORD || (jdbcParsed && jdbcParsed.password) || 'postgres',
     database: process.env.PGDATABASE || (jdbcParsed && jdbcParsed.database) || 'watani_b2c',
-    ssl: process.env.PGSSLMODE === 'require' ? { rejectUnauthorized: false } : false
+    ssl: process.env.PGSSLMODE === 'require' ? { rejectUnauthorized: false } : false,
+    connectionTimeoutMillis: 5000
 };
 
 let activeDb = null;

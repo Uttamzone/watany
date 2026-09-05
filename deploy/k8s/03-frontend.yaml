@@ -6,11 +6,8 @@ metadata:
 spec:
   replicas: 1
   strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 0
-      maxSurge: 1
-  minReadySeconds: 5
+    type: Recreate
+  minReadySeconds: 3
   selector:
     matchLabels:
       app: watani-b2c-website
@@ -27,6 +24,10 @@ spec:
           ports:
             - containerPort: 3000
           env:
+            - name: HOSTNAME
+              value: "0.0.0.0"
+            - name: PORT
+              value: "3000"
             # Bounds V8's heap explicitly rather than relying on Node's own cgroup-limit
             # detection - caps it below the 512Mi container limit, leaving headroom for
             # non-heap overhead (buffers, native modules, thread stacks).
@@ -37,27 +38,30 @@ spec:
               cpu: "100m"
               memory: "256Mi"
             limits:
-              cpu: "500m"
+              cpu: "1"
               memory: "512Mi"
           readinessProbe:
             httpGet:
-              path: /
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /api/health
               port: 3000
             initialDelaySeconds: 15
             periodSeconds: 10
-          livenessProbe:
-            httpGet:
-              path: /
-              port: 3000
-            initialDelaySeconds: 30
-            periodSeconds: 20
-            failureThreshold: 3
+            timeoutSeconds: 3
+            failureThreshold: 5
           lifecycle:
             preStop:
               # Keeps accepting connections briefly so Traefik's endpoint removal can propagate first.
               exec:
-                command: ["sh", "-c", "sleep 5"]
-      terminationGracePeriodSeconds: 20
+                command: ["sh", "-c", "sleep 2"]
+      terminationGracePeriodSeconds: 15
 ---
 apiVersion: v1
 kind: Service
