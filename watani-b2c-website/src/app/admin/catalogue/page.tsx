@@ -195,6 +195,15 @@ export default function AdminCataloguePage() {
             },
         },
         {
+            key: "moq",
+            header: "MOQ",
+            render: (row) => {
+                const tier = row.variants[0]?.priceTiers.find((t) => t.pricingGroup === "RETAIL");
+                const moq = tier?.minQuantity ?? (row as any).minimumOrderQuantity ?? (row as any).minQuantity ?? 1;
+                return <span className="font-medium text-muted">{moq} {row.variants[0]?.unit || "unit"}</span>;
+            },
+        },
+        {
             key: "active",
             header: "Status",
             sortKey: "active",
@@ -462,7 +471,7 @@ function ProductCardList({
                                         {row.name}
                                     </Link>
                                     <p className="mt-0.5 text-[12px] text-muted">
-                                        {row.categorySlug} · {row.variants.length} variant{row.variants.length === 1 ? "" : "s"}
+                                        {row.categorySlug} · {row.variants.length} variant{row.variants.length === 1 ? "" : "s"} · MOQ: {tier?.minQuantity ?? 1} {row.variants[0]?.unit || "unit"}
                                     </p>
                                 </div>
                             </div>

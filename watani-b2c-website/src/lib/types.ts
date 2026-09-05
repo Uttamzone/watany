@@ -27,18 +27,24 @@ export type CategorySlug =
 /** Mirrors com.watani.b2c.domain.pricing.PricingGroup. */
 export type PricingGroup = "RETAIL" | "WHOLESALE" | "DISTRIBUTOR";
 
-/**
- * How the listed price resolved for the viewer's pricing group (CatalogueDtos.PricingRelation).
- * Only present for a group-aware backend quote - seed fixtures never populate it.
- * @param unlockMessage e.g. "Add 4 more to unlock wholesale pricing at $12.50 each"
- */
+export type PriceTierSummary = {
+    id?: number;
+    pricingGroup: PricingGroup;
+    unitPrice: number;
+    minQuantity: number;
+    compareAtPrice?: number | null;
+};
+
 export type PricingRelation = {
     appliedGroup: PricingGroup;
     yourGroup: PricingGroup;
     fellBackToRetail: boolean;
+    minQuantity?: number;
+    minimumOrderQuantity?: number;
     unlockMessage?: string;
     unlockAtQuantity?: number;
     unlockUnitPrice?: number;
+    tiers?: PriceTierSummary[];
 };
 
 export type Product = {
@@ -69,6 +75,9 @@ export type Product = {
     reviewCount?: number;
     sku: string;
     description: string;
+    /** Minimum order quantity required or configured for this product */
+    minQuantity?: number;
+    minimumOrderQuantity?: number;
     /**
      * Long-form HTML for the Description tab. Admin-authored, so it must pass
      * through `sanitizeRichText` before rendering.
@@ -101,6 +110,8 @@ export type ProductSpecifications = {
     color?: string;
     brand?: string;
     categoryName?: string;
+    minQuantity?: number;
+    minimumOrderQuantity?: number;
 };
 
 /** A published customer review (F-CAT-7). */

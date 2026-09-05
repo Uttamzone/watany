@@ -12,6 +12,7 @@ type FieldKey =
     | "product"
     | "image"
     | "category"
+    | "minQuantity"
     | "sku"
     | "unit"
     | "stock"
@@ -41,6 +42,7 @@ const FIELD_DEFS: FieldDef[] = [
     {key: "product", label: "Product", defaultOn: true, role: "title"},
     {key: "image", label: "Image", defaultOn: true, role: "meta"},
     {key: "category", label: "Category", defaultOn: true, role: "chip"},
+    {key: "minQuantity", label: "Min. Order (MOQ)", defaultOn: true, role: "chip"},
     {key: "price", label: "Price (retail)", defaultOn: true, role: "price"},
     {key: "tax", label: "Tax", defaultOn: true, role: "chip"},
     {key: "sku", label: "SKU", defaultOn: false, role: "meta", variantLevel: true},
@@ -227,6 +229,13 @@ export function CataloguePdfModal({open, onClose, products, title}: CataloguePdf
                 return ""; // drawn separately (PDF: didDrawCell, preview: <img>)
             case "category":
                 return row.product.categorySlug;
+            case "minQuantity": {
+                const variant = row.variant ?? row.product.variants?.[0];
+                const retailTier = variant?.priceTiers?.find((t) => t.pricingGroup === "RETAIL") ?? variant?.priceTiers?.[0];
+                const moq = retailTier?.minQuantity ?? (row.product as any).minimumOrderQuantity ?? (row.product as any).minQuantity ?? 1;
+                const unit = variant?.unit || (row.product as any).unit || "unit";
+                return `MOQ: ${moq} ${unit}`;
+            }
             case "sku":
                 return row.variant?.sku ?? "-";
             case "unit":

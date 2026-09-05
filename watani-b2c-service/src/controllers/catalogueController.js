@@ -121,6 +121,8 @@ async function getProducts(req, res) {
                 material: p.material,
                 color: p.color,
                 inStock: (defaultVariant.stockQuantity !== null && defaultVariant.stockQuantity !== undefined) ? defaultVariant.stockQuantity > 0 : true,
+                minQuantity: priceInfo.pricingRelation?.minQuantity || 1,
+                minimumOrderQuantity: priceInfo.pricingRelation?.minimumOrderQuantity || 1,
                 pricing: priceInfo.pricingRelation
             });
         }
@@ -231,6 +233,8 @@ async function getProductBySlug(req, res) {
             material: p.material,
             color: p.color,
             inStock: defaultVariant.stockQuantity > 0,
+            minQuantity: priceInfo.pricingRelation?.minQuantity || 1,
+            minimumOrderQuantity: priceInfo.pricingRelation?.minimumOrderQuantity || 1,
             pricing: priceInfo.pricingRelation,
             specifications: {
                 weightGrams: defaultVariant.weightGrams,
@@ -241,7 +245,9 @@ async function getProductBySlug(req, res) {
                 material: p.material,
                 color: p.color,
                 brand: p.brand,
-                categoryName: p.categoryName
+                categoryName: p.categoryName,
+                minQuantity: priceInfo.pricingRelation?.minQuantity || 1,
+                minimumOrderQuantity: priceInfo.pricingRelation?.minimumOrderQuantity || 1
             },
             variants,
             reviews: revRes.rows

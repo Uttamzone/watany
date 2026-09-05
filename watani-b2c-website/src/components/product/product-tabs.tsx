@@ -299,6 +299,13 @@ function specRows(product: Product): SpecRow[] {
     const specs = product.specifications;
     const rows: SpecRow[] = [];
 
+    const moq = specs?.minimumOrderQuantity ?? specs?.minQuantity ?? product.minimumOrderQuantity ?? product.minQuantity ?? product.pricing?.minimumOrderQuantity ?? product.pricing?.minQuantity ?? 1;
+    rows.push({
+        label: "Minimum Order Quantity (MOQ)",
+        value: `${moq} ${moq === 1 ? (product.unit || "unit") : "units"}`,
+        icon: Package,
+    });
+
     if (specs?.weightGrams !== undefined) {
         rows.push({
             label: "Weight",

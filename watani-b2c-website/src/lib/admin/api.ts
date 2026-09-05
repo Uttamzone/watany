@@ -76,7 +76,7 @@ let stateCategories: CategoryResponse[] = [
     { id: 8, slug: "beauty-care", name: "Beauty Care", tagline: "Olive oil soap & care", active: true, productCount: 1 },
 ];
 
-function mapCatalogueToAdminProduct(p: any, index: number): AdminProductResponse {
+export function mapCatalogueToAdminProduct(p: any, index = 0): AdminProductResponse {
     const id = typeof p.id === "number" ? p.id : parseInt(p.id, 10) || (index + 1);
     const mainImg = (p.image && typeof p.image === "string" && p.image.trim()) ? p.image : "/images/placeholder.png";
     const galleryImgs = p.gallery && Array.isArray(p.gallery) && p.gallery.length > 0 ? p.gallery : [mainImg];
@@ -129,7 +129,7 @@ function mapCatalogueToAdminProduct(p: any, index: number): AdminProductResponse
                     id: 1,
                     pricingGroup: "RETAIL",
                     unitPrice: v.price ?? parsedPrice,
-                    minQuantity: 1,
+                    minQuantity: v.minimumOrderQuantity ?? v.minQuantity ?? p.minimumOrderQuantity ?? p.minQuantity ?? 1,
                     compareAtPrice: p.compareAtPrice ?? null,
                     validFrom: null,
                     validTo: null,
@@ -158,7 +158,7 @@ function mapCatalogueToAdminProduct(p: any, index: number): AdminProductResponse
                         id: 1,
                         pricingGroup: "RETAIL",
                         unitPrice: parsedPrice,
-                        minQuantity: 1,
+                        minQuantity: p.minimumOrderQuantity ?? p.minQuantity ?? 1,
                         compareAtPrice: p.compareAtPrice ?? null,
                         validFrom: null,
                         validTo: null,

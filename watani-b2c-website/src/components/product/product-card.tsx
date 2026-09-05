@@ -52,8 +52,11 @@ export function ProductCard({product}: { product: Product }) {
         <p className="mt-0.5 text-center text-[11px] font-semibold uppercase tracking-wide text-muted @[240px]/card:mt-1 @[240px]/card:text-[12px]">
           {product.unit}
         </p>
-        <div className="mt-2 flex justify-center @[240px]/card:mt-3">
+        <div className="mt-2 flex flex-col items-center justify-center gap-1 @[240px]/card:mt-2.5">
           <Price product={pricedProduct} showMinimumTierPrice />
+          <span className="inline-flex items-center rounded-md bg-teal-950/[0.05] px-2 py-0.5 text-[10px] font-bold text-teal-900 @[240px]/card:text-[11px]">
+            MOQ: {pricedProduct.minimumOrderQuantity ?? pricedProduct.minQuantity ?? 1} {pricedProduct.unit || "unit"}
+          </span>
         </div>
       </Link>
 

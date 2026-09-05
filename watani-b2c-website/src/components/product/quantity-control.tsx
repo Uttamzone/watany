@@ -40,6 +40,8 @@ export function QuantityControl({ product }: { product: Product }) {
     );
   }
 
+  const moq = product.minimumOrderQuantity ?? product.minQuantity ?? 1;
+
   return (
     <div
       // Inline custom property, not `bg-*` utility swap - Tailwind's cascade order
@@ -55,7 +57,7 @@ export function QuantityControl({ product }: { product: Product }) {
         <button
           type="button"
           disabled={pending}
-          onClick={() => void add(product)}
+          onClick={() => void add(product, moq)}
           aria-label={`Add ${product.name} to cart`}
           className="absolute inset-0 grid animate-fade-in place-items-center text-teal-950 transition-colors hover:bg-black/[0.04] disabled:opacity-60"
         >
@@ -66,7 +68,7 @@ export function QuantityControl({ product }: { product: Product }) {
           <button
             type="button"
             disabled={pending || !line}
-            onClick={() => line && void setQuantity(line.itemId, quantity - 1)}
+            onClick={() => line && void setQuantity(line.itemId, quantity <= moq ? 0 : quantity - 1)}
             aria-label={`Decrease ${product.name} quantity`}
             className="grid size-9 place-items-center rounded-full bg-white/85 text-teal-950 transition-colors hover:bg-white disabled:opacity-60"
           >
@@ -94,7 +96,7 @@ export function QuantityControl({ product }: { product: Product }) {
           <button
             type="button"
             disabled={pending || outOfStock || atStockLimit}
-            onClick={() => void add(product)}
+            onClick={() => void add(product, 1)}
             aria-label={`Increase ${product.name} quantity`}
             className="grid size-9 place-items-center rounded-full bg-white/85 text-teal-950 transition-colors hover:bg-white disabled:opacity-60"
           >

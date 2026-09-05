@@ -48,6 +48,8 @@ type ApiProduct = {
     material: string | null;
     color: string | null;
     inStock: boolean;
+    minQuantity?: number | null;
+    minimumOrderQuantity?: number | null;
     pricing?: ApiPricingRelation | null;
 };
 
@@ -56,9 +58,12 @@ type ApiPricingRelation = {
     appliedGroup: PricingGroup;
     yourGroup: PricingGroup;
     fellBackToRetail: boolean;
+    minQuantity?: number | null;
+    minimumOrderQuantity?: number | null;
     unlockMessage: string | null;
     unlockAtQuantity: number | null;
     unlockUnitPrice: number | null;
+    tiers?: any[] | null;
 };
 
 type ApiSpecifications = {
@@ -71,6 +76,8 @@ type ApiSpecifications = {
     color: string | null;
     brand: string | null;
     categoryName: string | null;
+    minQuantity?: number | null;
+    minimumOrderQuantity?: number | null;
 };
 
 type ApiReview = {
@@ -97,6 +104,7 @@ function toProduct(dto: ApiProduct): Product {
     const priceParts = priceNum.toFixed(2).split('.');
     const priceMajor = String(dto.priceMajor || priceParts[0] || '0');
     const priceMinor = String(dto.priceMinor || priceParts[1] || '00');
+    const moq = dto.minimumOrderQuantity ?? dto.minQuantity ?? dto.pricing?.minimumOrderQuantity ?? dto.pricing?.minQuantity ?? 1;
 
     return {
         id: String(dto.id),
@@ -110,6 +118,8 @@ function toProduct(dto: ApiProduct): Product {
         priceMinor,
         compareAtMajor: dto.compareAtMajor ?? undefined,
         compareAtMinor: dto.compareAtMinor ?? undefined,
+        minQuantity: moq,
+        minimumOrderQuantity: moq,
         image: dto.image ?? "",
         gallery: dto.gallery,
         category: dto.category,
@@ -119,7 +129,7 @@ function toProduct(dto: ApiProduct): Product {
         sku: dto.sku,
         description: dto.description ?? "",
         longDescription: dto.longDescription ?? undefined,
-        specifications: toSpecifications(dto.specifications),
+        specifications: toSpecifications({ ...dto.specifications, minQuantity: moq, minimumOrderQuantity: moq } as any),
         region: dto.region ?? undefined,
         material: dto.material ?? undefined,
         color: dto.color ?? undefined,
@@ -136,9 +146,12 @@ function toPricingRelation(
         appliedGroup: dto.appliedGroup,
         yourGroup: dto.yourGroup,
         fellBackToRetail: dto.fellBackToRetail,
+        minQuantity: dto.minQuantity ?? undefined,
+        minimumOrderQuantity: dto.minimumOrderQuantity ?? undefined,
         unlockMessage: dto.unlockMessage ?? undefined,
         unlockAtQuantity: dto.unlockAtQuantity ?? undefined,
         unlockUnitPrice: dto.unlockUnitPrice ?? undefined,
+        tiers: dto.tiers ?? undefined,
     };
 }
 
@@ -160,6 +173,8 @@ function toSpecifications(
         color: dto.color ?? undefined,
         brand: dto.brand ?? undefined,
         categoryName: dto.categoryName ?? undefined,
+        minQuantity: dto.minQuantity ?? undefined,
+        minimumOrderQuantity: dto.minimumOrderQuantity ?? undefined,
     };
 }
 
@@ -223,6 +238,7 @@ const CATALOGUE_PAGE_SIZE = 100;
 function adminProductToStorefrontProduct(ap: AdminProductResponse): Product {
     const defaultVariant = ap.variants[0];
     const retailTier = defaultVariant?.priceTiers.find(pt => pt.pricingGroup === "RETAIL") ?? defaultVariant?.priceTiers[0];
+    const moq = retailTier?.minQuantity || 1;
     const priceVal = retailTier?.unitPrice ?? 0;
     const priceParts = priceVal.toFixed(2).split(".");
 
@@ -241,6 +257,8 @@ function adminProductToStorefrontProduct(ap: AdminProductResponse): Product {
         priceMinor: priceParts[1],
         compareAtMajor: compareParts ? compareParts[0] : undefined,
         compareAtMinor: compareParts ? compareParts[1] : undefined,
+        minQuantity: moq,
+        minimumOrderQuantity: moq,
         image: ap.images && ap.images.length > 0 ? ap.images[0].url : "/images/placeholder.png",
         gallery: ap.images && ap.images.length > 0 ? ap.images.map(img => img.url) : undefined,
         category: ap.categorySlug as CategorySlug,
@@ -260,6 +278,8 @@ function adminProductToStorefrontProduct(ap: AdminProductResponse): Product {
             color: ap.color ?? undefined,
             brand: ap.brandSlug ?? undefined,
             categoryName: ap.categorySlug,
+            minQuantity: moq,
+            minimumOrderQuantity: moq,
         },
         region: ap.region ?? undefined,
         material: ap.material ?? undefined,

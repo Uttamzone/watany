@@ -89,6 +89,12 @@ async function resolvePrice(variantId, group = 'RETAIL', quantity = 1) {
     const formattedPrice = formatCurrency(unitPrice);
     const formattedCompare = formatCurrency(compareAt);
 
+    const relevantTiers = buyerTiers.length > 0 ? buyerTiers : tiers.filter(t => t.pricing_group === 'RETAIL');
+    const baseTier = relevantTiers.length > 0
+        ? relevantTiers.reduce((lowest, t) => ((t.min_quantity || 1) < (lowest.min_quantity || 1) ? t : lowest), relevantTiers[0])
+        : selectedTier;
+    const moq = baseTier && baseTier.min_quantity ? baseTier.min_quantity : 1;
+
     return {
         price: unitPrice,
         priceMajor: formattedPrice.major,
@@ -100,9 +106,18 @@ async function resolvePrice(variantId, group = 'RETAIL', quantity = 1) {
             appliedGroup: selectedTier.pricing_group,
             yourGroup: buyerGroup,
             fellBackToRetail,
+            minQuantity: moq,
+            minimumOrderQuantity: moq,
             unlockMessage,
             unlockAtQuantity,
-            unlockUnitPrice
+            unlockUnitPrice,
+            tiers: (relevantTiers.length > 0 ? relevantTiers : tiers).map(t => ({
+                id: t.id,
+                pricingGroup: t.pricing_group,
+                unitPrice: parseFloat(t.unit_price),
+                minQuantity: t.min_quantity || 1,
+                compareAtPrice: t.compare_at_price ? parseFloat(t.compare_at_price) : null
+            })).sort((a, b) => a.minQuantity - b.minQuantity)
         }
     };
 }

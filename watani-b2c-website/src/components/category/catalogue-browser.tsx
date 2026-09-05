@@ -4,6 +4,9 @@ import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {useRouter} from "next/navigation";
 import {motion, useReducedMotion} from "framer-motion";
 import {ProductGrid} from "@/components/home/product-section";
+import {FileText} from "lucide-react";
+import {CataloguePdfModal} from "@/components/admin/catalogue-pdf-modal";
+import {mapCatalogueToAdminProduct} from "@/lib/admin/api";
 import {type DropdownSpec, FilterToolbar, type FilterValue,} from "./filter-toolbar";
 import {
     type CatalogueFilters,
@@ -51,6 +54,7 @@ export function CatalogueBrowser({
     const router = useRouter();
     const [allProducts, setAllProducts] = useState<Product[]>(products);
     const [searchQuery, setSearchQuery] = useState<string | undefined>(initialQuery);
+    const [pdfOpen, setPdfOpen] = useState(false);
     const [values, setValues] = useState<Record<string, FilterValue>>({
         // Category is multi-select, so it holds an array.
         category: initialCategory ? [initialCategory] : undefined,
@@ -294,17 +298,29 @@ export function CatalogueBrowser({
                 />
             </motion.div>
 
-            <p
-                ref={resultsRef}
-                aria-live="polite"
-                className="mt-4 scroll-mt-[168px] text-[14px] text-muted"
-            >
-                {hasMore ? `Showing ${shownCount} of ${visible.length} products` : null}
-                {!hasMore
-                    ? `${visible.length} ${visible.length === 1 ? "product" : "products"}`
-                    : null}
-                {initialQuery ? ` matching “${initialQuery}”` : ""}
-            </p>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <p
+                    ref={resultsRef}
+                    aria-live="polite"
+                    className="scroll-mt-[168px] text-[14px] text-muted"
+                >
+                    {hasMore ? `Showing ${shownCount} of ${visible.length} products` : null}
+                    {!hasMore
+                        ? `${visible.length} ${visible.length === 1 ? "product" : "products"}`
+                        : null}
+                    {initialQuery ? ` matching “${initialQuery}”` : ""}
+                </p>
+
+                <button
+                    type="button"
+                    onClick={() => setPdfOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-teal-950/15 bg-white px-3.5 py-1.5 text-[12px] font-bold text-teal-950 shadow-xs transition-colors hover:bg-soft-control hover:border-teal-950/30"
+                    title="Download current catalogue view as a branded PDF"
+                >
+                    <FileText className="size-3.5 text-lime-600" aria-hidden />
+                    <span>Download PDF Catalogue</span>
+                </button>
+            </div>
 
             {/* Keyed remount instead of AnimatePresence - its exit can leave the old grid mounted if it never completes. */}
             <div className="mt-5">
@@ -348,6 +364,13 @@ export function CatalogueBrowser({
                     </button>
                 </div>
             )}
+
+            <CataloguePdfModal
+                open={pdfOpen}
+                onClose={() => setPdfOpen(false)}
+                products={visible.map((p, idx) => mapCatalogueToAdminProduct(p, idx))}
+                title="Catalogue"
+            />
         </>
     );
 }
