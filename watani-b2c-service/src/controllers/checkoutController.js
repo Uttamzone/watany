@@ -96,10 +96,32 @@ async function getQuote(req, res) {
 
 async function createIntent(req, res) {
     try {
-        const { cartId, shippingAddress, billingAddress, paymentMethod = 'stripe', couponCode, shippingServiceCode = 'FREIGHTCOM_STANDARD' } = req.body;
+        const {
+            cartId,
+            email,
+            shippingAddress,
+            billingAddress,
+            paymentMethod = 'stripe',
+            couponCode,
+            shippingServiceCode = 'FREIGHTCOM_STANDARD'
+        } = req.body;
+
         const userId = req.user ? req.user.id : null;
-        const buyerGroup = req.user ? req.user.pricingGroup : 'RETAIL';
-        const userEmail = req.user ? req.user.email : (shippingAddress ? shippingAddress.email : 'guest@watani.local');
+        const buyerGroup = (req.user && req.user.pricingGroup) || 'RETAIL';
+
+        // Extract customer email with robust fallbacks:
+        // 1. Direct email field from request body (sent by checkout page)
+        // 2. Authenticated user profile email
+        // 3. Email within shipping or billing address object
+        // 4. Default guest email as final safeguard against NOT NULL constraint
+        const rawEmail = (
+            (typeof email === 'string' && email.trim()) ||
+            (req.user && typeof req.user.email === 'string' && req.user.email.trim()) ||
+            (shippingAddress && typeof shippingAddress.email === 'string' && shippingAddress.email.trim()) ||
+            (billingAddress && typeof billingAddress.email === 'string' && billingAddress.email.trim()) ||
+            'guest@wataniandsons.ca'
+        );
+        const userEmail = rawEmail.toLowerCase();
 
         const sessionToken = req.headers['x-cart-token'] || req.headers['x-cart-session'] || req.query?.sessionToken;
         let activeCartId = cartId;
