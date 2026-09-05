@@ -1,4 +1,4 @@
-import {ApiError, apiFetch, getAccessToken} from "@/lib/api";
+import {ApiError, apiFetch, getAccessToken, getApiBaseUrl} from "@/lib/api";
 import {readCartToken} from "@/lib/cart";
 import type {PricingGroup} from "@/lib/auth";
 import {registerOrderForAdmin} from "@/lib/admin/api";
@@ -579,8 +579,6 @@ export async function getOrder(orderNumber: string): Promise<Order> {
     return await apiFetch<Order>(`/api/orders/${orderNumber}`, {cache: "no-store"});
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
-
 /**
  * Downloads an order's invoice PDF (F-ACC-5). Bypasses apiFetch since the body
  * isn't JSON; guests authorise with the order email instead of a token.
@@ -605,7 +603,8 @@ export async function downloadInvoice(
             headers.set("Content-Type", "application/json");
         }
 
-        const response = await fetch(`${API_BASE_URL}${path}`, {
+        const baseUrl = getApiBaseUrl();
+        const response = await fetch(`${baseUrl}${path}`, {
             method: useGuestPath ? "POST" : "GET",
             headers,
             body: useGuestPath

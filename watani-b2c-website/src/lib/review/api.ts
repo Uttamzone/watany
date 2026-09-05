@@ -1,7 +1,5 @@
-import {ApiError} from "@/lib/api";
+import {ApiError, getApiBaseUrl} from "@/lib/api";
 import {registerReviewForAdmin} from "@/lib/admin/api";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
 
 export type ReviewableItem = {
     orderItemId: number;
@@ -32,7 +30,8 @@ export type SubmitReviewRequest = {
  * order" flow, no bearer token or refresh-and-retry.
  */
 async function publicFetch<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
+    const baseUrl = getApiBaseUrl();
+    const response = await fetch(`${baseUrl}${path}`, {
         ...init,
         headers: {"Content-Type": "application/json", ...init?.headers},
     });

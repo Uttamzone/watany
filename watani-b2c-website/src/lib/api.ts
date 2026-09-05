@@ -1,6 +1,29 @@
 import type {AuthResponse} from "@/lib/auth";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
+/**
+ * Resolves API Base URL dynamically.
+ * In production browser sessions, if NEXT_PUBLIC_API_BASE_URL was not passed at build time
+ * (or defaulted to localhost), it dynamically falls back to the current browser origin or
+ * https://wataniandsons.ca, preventing "Failed to fetch" and Mixed Content blocks for real shoppers.
+ */
+export function getApiBaseUrl(): string {
+    if (typeof window !== "undefined") {
+        const envUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+        if (envUrl && !envUrl.includes("localhost") && !envUrl.includes("127.0.0.1")) {
+            return envUrl.replace(/\/$/, "");
+        }
+        if (window.location.hostname && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
+            return window.location.origin;
+        }
+    }
+    const envUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+    if (envUrl) {
+        return envUrl.replace(/\/$/, "");
+    }
+    return process.env.NODE_ENV === "production" ? "https://wataniandsons.ca" : "http://localhost:8080";
+}
+
+export const API_BASE_URL = getApiBaseUrl();
 
 export class ApiError extends Error {
     constructor(
@@ -120,7 +143,8 @@ export async function silentRefresh(): Promise<AuthResponse | null> {
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 2500);
-            const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+            const baseUrl = getApiBaseUrl();
+            const response = await fetch(`${baseUrl}/api/auth/refresh`, {
                 method: "POST",
                 credentials: "include",
                 signal: controller.signal,
@@ -180,12 +204,13 @@ export async function apiFetch<T>(
         headers.set("Authorization", `Bearer ${currentAccessToken}`);
     }
 
+    const baseUrl = getApiBaseUrl();
     let response: Response;
     try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 12000);
         const signal = init?.signal ?? controller.signal;
-        response = await fetch(`${API_BASE_URL}${path}`, {
+        response = await fetch(`${baseUrl}${path}`, {
             ...init,
             headers,
             signal,
@@ -193,7 +218,7 @@ export async function apiFetch<T>(
         clearTimeout(timeoutId);
     } catch {
         throw new ApiError(
-            `Unable to connect to backend server at ${API_BASE_URL}. Please make sure the backend service is running on port 8080.`,
+            `Unable to connect to backend server at ${baseUrl}. Please make sure the backend service is running on port 8080.`,
             0,
         );
     }
@@ -239,7 +264,8 @@ export async function apiFetchForm<T>(
         headers.set("Authorization", `Bearer ${currentAccessToken}`);
     }
 
-    const response = await fetch(`${API_BASE_URL}${path}`, {
+    const baseUrl = getApiBaseUrl();
+    const response = await fetch(`${baseUrl}${path}`, {
         ...init,
         method: init?.method ?? "POST",
         headers,
@@ -277,7 +303,8 @@ export async function apiFetchBlob(
         headers.set("Authorization", `Bearer ${currentAccessToken}`);
     }
 
-    const response = await fetch(`${API_BASE_URL}${path}`, {
+    const baseUrl = getApiBaseUrl();
+    const response = await fetch(`${baseUrl}${path}`, {
         ...init,
         headers,
     });
