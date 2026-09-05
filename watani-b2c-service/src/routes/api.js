@@ -64,9 +64,12 @@ mapRoute('get', ['/v1/admin/customers', '/admin/customers'], verifyToken, requir
 mapRoute('post', ['/v1/admin/customers/:id/approve', '/admin/customers/:id/approve'], verifyToken, requireAdmin, admin.approveCustomerGroup);
 mapRoute('post', ['/v1/admin/customers/:id/reject', '/admin/customers/:id/reject'], verifyToken, requireAdmin, admin.rejectCustomerGroup);
 mapRoute('get', ['/v1/admin/catalogue/products', '/admin/catalogue/products'], verifyToken, requireAdmin, admin.listAdminProducts);
-mapRoute('put', ['/v1/admin/catalogue/stock', '/admin/catalogue/stock'], verifyToken, requireAdmin, admin.updateStock);
+mapRoute('put', ['/v1/admin/catalogue/variants/:sku/stock', '/admin/catalogue/variants/:sku/stock', '/v1/admin/catalogue/stock', '/admin/catalogue/stock'], verifyToken, requireAdmin, admin.updateStock);
 mapRoute('get', ['/v1/admin/orders', '/admin/orders'], verifyToken, requireAdmin, admin.listAdminOrders);
-mapRoute('put', ['/v1/admin/orders/:id/status', '/admin/orders/:id/status'], verifyToken, requireAdmin, admin.updateOrderStatus);
+mapRoute('get', ['/v1/admin/orders/:orderNumber', '/admin/orders/:orderNumber'], verifyToken, requireAdmin, admin.getAdminOrderDetail);
+mapRoute('put', ['/v1/admin/orders/:orderNumber/status', '/admin/orders/:orderNumber/status', '/v1/admin/orders/:orderNumber/transition', '/admin/orders/:orderNumber/transition'], verifyToken, requireAdmin, admin.updateOrderStatus);
+mapRoute('post', ['/v1/admin/orders/:orderNumber/paid', '/admin/orders/:orderNumber/paid'], verifyToken, requireAdmin, admin.markOrderPaid);
+mapRoute('post', ['/v1/admin/orders/:orderNumber/refund', '/admin/orders/:orderNumber/refund'], verifyToken, requireAdmin, admin.refundOrder);
 mapRoute('get', ['/v1/admin/reports/kpis', '/admin/reports/kpis'], verifyToken, requireAdmin, admin.getKpis);
 mapRoute('get', ['/v1/admin/staff', '/admin/staff'], verifyToken, requireAdmin, admin.listStaff);
 

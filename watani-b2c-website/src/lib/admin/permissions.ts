@@ -49,6 +49,7 @@ const ADMIN_ROLES = new Set(Object.keys(ROLE_PERMISSIONS));
 
 export function permissionsForRoles(roles: string[]): Set<Permission> {
     const result = new Set<Permission>();
+    if (!Array.isArray(roles)) return result;
     for (const role of roles) {
         for (const permission of ROLE_PERMISSIONS[role] ?? []) {
             result.add(permission);
@@ -59,6 +60,7 @@ export function permissionsForRoles(roles: string[]): Set<Permission> {
 
 /** Whether any of the user's roles grant access to the admin portal at all. */
 export function isAdminRole(roles: string[]): boolean {
+    if (!Array.isArray(roles)) return false;
     return roles.some((role) => ADMIN_ROLES.has(role));
 }
 

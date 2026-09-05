@@ -5,20 +5,56 @@ require('dotenv').config();
 
 const db = require('./db');
 const apiRouter = require('./routes/api');
+const misc = require('./controllers/miscController');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// CORS setup matching Spring Boot configuration
-const corsOptions = {
-    origin: '*',
+// Cookie parser middleware (lightweight, zero-dependency)
+app.use((req, res, next) => {
+    req.cookies = {};
+    const cookieHeader = req.headers.cookie;
+    if (cookieHeader) {
+        cookieHeader.split(';').forEach(cookie => {
+            const parts = cookie.split('=');
+            if (parts.length >= 2) {
+                const name = parts[0].trim();
+                const val = decodeURIComponent(parts.slice(1).join('=').trim());
+                req.cookies[name] = val;
+            }
+        });
+    }
+    next();
+});
+
+// Helper to set cookies with standard options
+app.use((req, res, next) => {
+    res.setCookie = (name, val, options = {}) => {
+        let cookieStr = `${name}=${encodeURIComponent(val)}`;
+        if (options.maxAge) cookieStr += `; Max-Age=${Math.floor(options.maxAge / 1000)}`;
+        if (options.expires) cookieStr += `; Expires=${options.expires.toUTCString()}`;
+        if (options.httpOnly !== false) cookieStr += '; HttpOnly';
+        if (options.secure !== false && (req.secure || req.headers['x-forwarded-proto'] === 'https' || process.env.COOKIE_SECURE === 'true')) {
+            cookieStr += '; Secure';
+        }
+        cookieStr += `; SameSite=${options.sameSite || 'Lax'}`;
+        cookieStr += `; Path=${options.path || '/'}`;
+        res.setHeader('Set-Cookie', cookieStr);
+    };
+    next();
+});
+
+// CORS setup supporting credentials with dynamic origin reflection
+app.use(cors({
+    origin: (origin, callback) => {
+        callback(null, origin || true);
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Cart-Session', 'X-Requested-With'],
-    exposedHeaders: ['Vary', 'Authorization']
-};
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Cart-Session', 'X-Cart-Token', 'X-Requested-With', 'stripe-signature'],
+    exposedHeaders: ['Vary', 'Authorization', 'Set-Cookie']
+}));
 
-app.use(cors(corsOptions));
 app.use(express.json({
     limit: '10mb',
     verify: (req, res, buf) => {
@@ -27,11 +63,14 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Vary header filter matching requirement.md §3 (Spring config/VaryHeaderFilter)
+// Vary header filter
 app.use((req, res, next) => {
     res.setHeader('Vary', 'Authorization');
     next();
 });
+
+// Direct Webhook Endpoints
+app.post(['/api/webhooks/payment', '/webhooks/payment', '/api/webhooks/stripe', '/webhooks/stripe'], misc.stripeWebhook);
 
 // Static uploads serving
 const uploadsDir = process.env.STORAGE_DIR || path.join(__dirname, '../uploads');
@@ -50,7 +89,7 @@ app.get('/', (req, res) => {
     });
 });
 
-app.get(['/actuator/health', '/health'], (req, res) => {
+app.get(['/actuator/health', '/health', '/api/health'], (req, res) => {
     res.json({
         status: 'UP',
         service: 'watani-b2c-express-service',
@@ -58,29 +97,19 @@ app.get(['/actuator/health', '/health'], (req, res) => {
     });
 });
 
-// Global Error Handler
-app.use((err, req, res, next) => {
-    console.error('[Global Error]:', err);
-    res.status(err.status || 500).json({
-        error: err.name || 'Internal Server Error',
-        message: err.message || 'An unexpected error occurred'
-    });
-});
-
-// Initialize database and start listening
 async function start() {
     try {
         await db.initDatabase();
-        app.listen(PORT, () => {
-            console.log(`==================================================`);
-            console.log(` Watani Express Backend running on port ${PORT}`);
-            console.log(` Health check: http://localhost:${PORT}/api/health`);
-            console.log(`==================================================`);
-        });
-    } catch (err) {
-        console.error('Failed to start server:', err);
-        process.exit(1);
+    } catch (e) {
+        console.error('[Database init error]:', e);
     }
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log(`========================================`);
+        console.log(`Watani Express Backend running on port ${PORT}`);
+        console.log(`Health check: http://localhost:${PORT}/api/health`);
+        console.log(`Stripe Webhook: http://localhost:${PORT}/api/webhooks/payment`);
+        console.log(`========================================`);
+    });
 }
 
 start();

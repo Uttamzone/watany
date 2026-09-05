@@ -900,7 +900,19 @@ export function listProducts(
         direction,
     });
     return fetchWithFallback(
-        () => apiFetch<PageResponse<AdminProductResponse>>(`/api/admin/catalogue/products?${params.toString()}`),
+        async () => {
+            const res = await apiFetch<any>(`/api/admin/catalogue/products?${params.toString()}`);
+            if (Array.isArray(res)) {
+                return {
+                    content: res,
+                    page,
+                    size,
+                    totalElements: res.length,
+                    totalPages: Math.ceil(res.length / size) || 1
+                };
+            }
+            return res;
+        },
         () => {
             const filtered = name.trim()
                 ? stateProducts.filter(p => p.name.toLowerCase().includes(name.toLowerCase()) || p.slug.toLowerCase().includes(name.toLowerCase()))
@@ -1212,7 +1224,7 @@ export function listOrders(
     return fetchWithFallback(
         async () => {
             const res = await apiFetch<PageResponse<OrderResponse>>(`/api/admin/orders?${params.toString()}`);
-            let content = res.content || [];
+            let content = Array.isArray(res) ? res : (res?.content || []);
             if (typeof window !== "undefined") {
                 syncOrdersFromStorage();
                 const existingNos = new Set(content.map(o => o.orderNumber));

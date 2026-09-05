@@ -46,10 +46,11 @@ export default function AdminOrdersPage() {
     useEffect(() => {
         adminApi
             .listOrders(page, PAGE_SIZE, sortKey, sortDirection)
-            .then((result) => {
-                setItems(result.content);
-                setTotalElements(result.totalElements);
-                setTotalPages(result.totalPages);
+            .then((result: any) => {
+                const list = Array.isArray(result?.content) ? result.content : (Array.isArray(result) ? result : []);
+                setItems(list);
+                setTotalElements(result?.totalElements ?? list.length);
+                setTotalPages(result?.totalPages ?? Math.max(1, Math.ceil(list.length / PAGE_SIZE)));
             })
             .catch((err) => {
                 const message = err instanceof ApiError ? err.message : "Failed to load orders.";

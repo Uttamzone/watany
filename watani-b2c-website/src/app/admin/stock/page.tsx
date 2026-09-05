@@ -54,9 +54,10 @@ export default function AdminStockPage() {
     useEffect(() => {
         adminApi
             .listProducts("", 0, 1000, "name", "asc")
-            .then((result) => {
-                const flattened: StockRow[] = result.content.flatMap((product) =>
-                    product.variants.map((variant) => ({product, variant})),
+            .then((result: any) => {
+                const list = Array.isArray(result?.content) ? result.content : (Array.isArray(result) ? result : []);
+                const flattened: StockRow[] = list.flatMap((product: any) =>
+                    (product?.variants || []).map((variant: any) => ({product, variant})),
                 );
                 setRows(flattened);
             })

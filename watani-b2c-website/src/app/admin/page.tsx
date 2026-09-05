@@ -49,8 +49,9 @@ const CHART_HEIGHT = 180;
 /** Interactive SVG Area & Bar Hybrid Chart with gradient fills, gridlines, and summary stats header. */
 function RevenueChart({sales, dimension}: { sales: SalesReportRow[]; dimension: SalesReportDimension }) {
     const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+    const safeSales = Array.isArray(sales) ? sales : [];
 
-    const totalRevenue = sales.reduce((acc, r) => acc + r.revenue, 0);
+    const totalRevenue = safeSales.reduce((acc, r) => acc + (r?.revenue || 0), 0);
     const totalOrders = sales.reduce((acc, r) => acc + r.orderCount, 0);
     const peakRow = sales.reduce((max, r) => (r.revenue > max.revenue ? r : max), sales[0] ?? {revenue: 0, orderCount: 0, label: ""});
     const max = Math.max(...sales.map((row) => row.revenue), 100);
@@ -325,7 +326,8 @@ function expectedLabels(option: (typeof RANGE_OPTIONS)[number]): string[] {
 /** Fills gaps in the backend's sparse (orders-only) buckets with zero-value rows so the chart
  *  always renders the full selected duration, not just the days/weeks/months that had sales. */
 function fillGaps(sales: SalesReportRow[], option: (typeof RANGE_OPTIONS)[number]): SalesReportRow[] {
-    const byLabel = new Map(sales.map((row) => [row.label, row]));
+    const list = Array.isArray(sales) ? sales : [];
+    const byLabel = new Map(list.map((row) => [row.label, row]));
     return expectedLabels(option).map(
         (label) => byLabel.get(label) ?? {label, orderCount: 0, revenue: 0},
     );
@@ -356,7 +358,8 @@ export default function AdminDashboardPage() {
         return () => {
             cancelled = true;
         };
-    }, [notifications]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     useEffect(() => {
         let cancelled = false;
@@ -383,7 +386,8 @@ export default function AdminDashboardPage() {
         return () => {
             cancelled = true;
         };
-    }, [range, notifications]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [range]);
 
     const loading = kpis === null && !error;
     const salesOption = RANGE_OPTIONS.find((o) => o.key === range)!;

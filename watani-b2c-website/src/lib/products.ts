@@ -320,25 +320,12 @@ export async function getAllProducts(): Promise<Product[]> {
             apiProductsMap.set(prod.slug, prod);
         }
 
-        // Overlay newly created or edited admin products and stock status
-        const adminProducts = await getAdminFallbackProducts();
-        for (const adminP of adminProducts) {
-            const existing = apiProductsMap.get(adminP.slug);
-            if (existing) {
-                apiProductsMap.set(adminP.slug, {
-                    ...existing,
-                    ...adminP,
-                    name: adminP.name || existing.name,
-                    fullName: adminP.fullName || existing.fullName,
-                    inStock: adminP.inStock,
-                    image: adminP.image || existing.image,
-                });
-            } else {
-                apiProductsMap.set(adminP.slug, adminP);
-            }
+        // When database returns products, preserve their authentic live images and data
+        if (apiProductsMap.size > 0) {
+            return Array.from(apiProductsMap.values());
         }
 
-        return Array.from(apiProductsMap.values());
+        return getAdminFallbackProducts();
     } catch (error) {
         console.error("Error fetching products from database:", error);
         return getAdminFallbackProducts();

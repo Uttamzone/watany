@@ -6,14 +6,58 @@ async function getOrders(req, res) {
             return res.status(401).json({ error: 'Unauthorized', message: 'Authentication required' });
         }
 
+        const userEmail = (req.user.email || '').toLowerCase();
+
         const { rows: orders } = await db.query(`
-            SELECT id, order_number as "orderNumber", status, payment_status as "paymentStatus",
-                   grand_total as "grandTotal", currency, created_at as "createdAt",
-                   (SELECT COUNT(*) FROM order_items WHERE order_id = orders.id) as "itemCount"
+            SELECT id, order_number as "orderNumber", email, status, payment_status as "paymentStatus",
+                   subtotal, shipping_total as "shippingTotal", tax_total as "taxTotal",
+                   grand_total as "grandTotal", currency, created_at as "createdAt", created_at as "placedAt",
+                   ship_full_name as "shipFullName", ship_line1 as "shipLine1", ship_city as "shipCity",
+                   ship_region as "shipRegion", ship_postal_code as "shipPostalCode", ship_country as "shipCountry",
+                   carrier_name as "carrierName", shipping_method as "shippingMethod",
+                   tracking_number as "trackingNumber", tracking_url as "trackingUrl"
             FROM orders
-            WHERE user_id = $1
+            WHERE user_id = $1 OR (email IS NOT NULL AND LOWER(email) = $2)
             ORDER BY created_at DESC;
-        `, [req.user.id]);
+        `, [req.user.id, userEmail]);
+
+        for (const order of orders) {
+            const itemsRes = await db.query(`
+                SELECT id, product_name as "productName", product_slug as "productSlug", sku, unit,
+                       image_url as "imageUrl", quantity, unit_price as "unitPrice", line_total as "lineTotal"
+                FROM order_items
+                WHERE order_id = $1;
+            `, [order.id]);
+
+            order.items = itemsRes.rows.map(item => ({
+                id: item.id,
+                productName: item.productName,
+                productSlug: item.productSlug,
+                sku: item.sku,
+                unit: item.unit || '1 Unit',
+                image: item.imageUrl || '/logo/watany-logo.png',
+                quantity: item.quantity || 1,
+                unitPrice: parseFloat(item.unitPrice) || 0,
+                lineTotal: parseFloat(item.lineTotal) || 0
+            }));
+
+            order.shippingAddress = {
+                fullName: order.shipFullName || 'Customer',
+                line1: order.shipLine1 || '',
+                city: order.shipCity || '',
+                region: order.shipRegion || '',
+                postalCode: order.shipPostalCode || '',
+                country: order.shipCountry || 'Canada'
+            };
+
+            order.timeline = [
+                {
+                    status: order.status || 'PLACED',
+                    message: `Order is currently ${order.status || 'PLACED'}`,
+                    at: order.createdAt || new Date().toISOString()
+                }
+            ];
+        }
 
         return res.json(orders);
     } catch (err) {
