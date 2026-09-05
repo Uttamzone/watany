@@ -71,20 +71,43 @@ async function stripeWebhook(req, res) {
     const sig = req.headers['stripe-signature'];
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || 'whsec_aLPGTG4hhKB1dElq8qBgrIJmM6sUTNio';
 
-    let event = req.body;
+    // req.body is a raw Buffer when the route uses express.raw() (registered before express.json())
+    // This is required for Stripe signature verification.
+    const rawPayload = Buffer.isBuffer(req.body) ? req.body : (req.rawBody || Buffer.from(JSON.stringify(req.body)));
 
     const stripeKey = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_API_KEY;
+
+    let event;
+
     if (sig && stripeKey) {
         try {
             const stripe = require('stripe')(stripeKey);
-            const payload = req.rawBody || JSON.stringify(req.body);
-            event = stripe.webhooks.constructEvent(payload, sig, webhookSecret);
-            console.log(`[Stripe Webhook] Verified signature for event: ${event.type}`);
+            event = stripe.webhooks.constructEvent(rawPayload, sig, webhookSecret);
+            console.log(`[Stripe Webhook] ✓ Signature verified for event: ${event.type}`);
         } catch (err) {
-            console.warn(`[Stripe Webhook Warning] Signature verification issue: ${err.message}. Processing event payload directly.`);
+            console.error(`[Stripe Webhook] ✗ Signature verification FAILED: ${err.message}`);
+            // Reject events with bad signatures to prevent replay attacks
+            return res.status(400).json({ error: 'Webhook signature verification failed', message: err.message });
         }
+    } else if (!sig) {
+        // No signature header - reject in production, warn in development
+        if (process.env.NODE_ENV === 'production') {
+            console.error('[Stripe Webhook] Rejected: missing stripe-signature header in production');
+            return res.status(400).json({ error: 'Missing stripe-signature header' });
+        }
+        // Development / local testing: parse body manually
+        try {
+            event = typeof req.body === 'object' && !Buffer.isBuffer(req.body)
+                ? req.body
+                : JSON.parse(rawPayload.toString());
+        } catch {
+            return res.status(400).json({ error: 'Invalid webhook payload' });
+        }
+        console.warn(`[Stripe Webhook] ⚠ Unverified development webhook: ${event?.type || 'unknown'}`);
     } else {
-        console.log(`[Stripe Webhook] Received unverified/development webhook: ${event?.type || 'unknown'}`);
+        // Has signature but no Stripe key - cannot verify
+        console.error('[Stripe Webhook] Cannot verify: STRIPE_SECRET_KEY not configured');
+        return res.status(400).json({ error: 'Stripe not configured on server' });
     }
 
     const eventType = event?.type;

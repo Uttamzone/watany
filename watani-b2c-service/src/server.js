@@ -55,6 +55,11 @@ app.use(cors({
     exposedHeaders: ['Vary', 'Authorization', 'Set-Cookie']
 }));
 
+// Stripe webhook MUST receive the raw body buffer before JSON parsing.
+// Register it first with express.raw() so Stripe signature verification works.
+const WEBHOOK_PATHS = ['/api/webhooks/payment', '/webhooks/payment', '/api/webhooks/stripe', '/webhooks/stripe'];
+app.post(WEBHOOK_PATHS, express.raw({ type: '*/*', limit: '10mb' }), misc.stripeWebhook);
+
 app.use(express.json({
     limit: '10mb',
     verify: (req, res, buf) => {
@@ -68,9 +73,6 @@ app.use((req, res, next) => {
     res.setHeader('Vary', 'Authorization');
     next();
 });
-
-// Direct Webhook Endpoints
-app.post(['/api/webhooks/payment', '/webhooks/payment', '/api/webhooks/stripe', '/webhooks/stripe'], misc.stripeWebhook);
 
 // Static uploads serving
 const uploadsDir = process.env.STORAGE_DIR || path.join(__dirname, '../uploads');
