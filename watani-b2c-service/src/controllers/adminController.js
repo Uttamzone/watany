@@ -363,6 +363,134 @@ async function listAdminProducts(req, res) {
     }
 }
 
+async function getAdminProduct(req, res) {
+    try {
+        const slugParam = decodeURIComponent(req.params.slug);
+        const isNumeric = /^\d+$/.test(slugParam);
+
+        let query = `
+            SELECT p.id, p.slug, p.name, p.full_name as "fullName",
+                   p.subtitle, p.description, p.category_id,
+                   c.slug as "categorySlug", c.name as category,
+                   p.badge, p.active, p.region, p.material, p.color
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.id
+            WHERE LOWER(p.slug) = LOWER($1)
+        `;
+        let params = [slugParam];
+        if (isNumeric) {
+            query += ` OR p.id = $2`;
+            params.push(parseInt(slugParam, 10));
+        }
+        query += ` LIMIT 1;`;
+
+        const { rows } = await db.query(query, params);
+        if (rows.length === 0) {
+            return res.status(404).json({ error: 'Not Found', message: 'Product not found' });
+        }
+
+        const p = rows[0];
+
+        // Images
+        const imgRes = await db.query(`
+            SELECT id, url, alt_text as "altText", display_order as "displayOrder"
+            FROM product_images
+            WHERE product_id = $1
+            ORDER BY display_order ASC;
+        `, [p.id]);
+        p.images = imgRes.rows.map((img, idx) => ({
+            id: img.id,
+            url: img.url,
+            altText: img.altText,
+            displayOrder: img.displayOrder,
+            isDefault: idx === 0
+        }));
+
+        // Authentic fallback if product has 0 images in DB
+        if (p.images.length === 0) {
+            const catItem = catalogueMap.get((p.slug || '').toLowerCase()) || catalogueMap.get((p.name || '').toLowerCase());
+            if (catItem && catItem.image) {
+                p.images = [{
+                    id: p.id,
+                    url: catItem.image,
+                    altText: p.name,
+                    displayOrder: 0,
+                    isDefault: true
+                }];
+            }
+        }
+
+        // Variants
+        const varRes = await db.query(`
+            SELECT id, sku, unit, stock_quantity as "stockQuantity",
+                   low_stock_threshold as "lowStockThreshold",
+                   backorder_allowed as "backorderAllowed",
+                   weight_grams as "weightGrams",
+                   length_cm as "lengthCm", width_cm as "widthCm", height_cm as "heightCm",
+                   active
+            FROM product_variants
+            WHERE product_id = $1
+            ORDER BY id ASC;
+        `, [p.id]);
+
+        p.variants = [];
+        for (const v of varRes.rows) {
+            const threshold = v.lowStockThreshold != null ? v.lowStockThreshold : 5;
+            const stockQty = v.stockQuantity != null ? v.stockQuantity : 0;
+            
+            const tierRes = await db.query(`
+                SELECT id, pricing_group as "pricingGroup", unit_price as "unitPrice",
+                       min_quantity as "minQuantity", compare_at_price as "compareAtPrice"
+                FROM price_tiers
+                WHERE variant_id = $1;
+            `, [v.id]);
+
+            p.variants.push({
+                id: v.id,
+                sku: v.sku,
+                unit: v.unit || '1 Unit',
+                stockQuantity: stockQty,
+                lowStockThreshold: threshold,
+                backorderAllowed: Boolean(v.backorderAllowed),
+                lowStock: stockQty <= threshold,
+                weightGrams: v.weightGrams,
+                lengthCm: v.lengthCm,
+                widthCm: v.widthCm,
+                heightCm: v.heightCm,
+                taxable: true,
+                priceTiers: tierRes.rows.map(t => ({
+                    id: t.id,
+                    pricingGroup: t.pricingGroup,
+                    unitPrice: parseFloat(t.unitPrice) || 0,
+                    minQuantity: t.minQuantity,
+                    compareAtPrice: t.compareAtPrice ? parseFloat(t.compareAtPrice) : null
+                }))
+            });
+        }
+
+        if (p.variants.length === 0) {
+            p.variants.push({
+                id: p.id,
+                sku: `SKU-${p.id}`,
+                unit: '1 Unit',
+                stockQuantity: 100,
+                lowStockThreshold: 5,
+                backorderAllowed: false,
+                lowStock: false,
+                taxable: true,
+                priceTiers: [
+                    { id: 1, pricingGroup: 'RETAIL', unitPrice: 25.00, minQuantity: 1, compareAtPrice: null }
+                ]
+            });
+        }
+
+        return res.json(p);
+    } catch (err) {
+        console.error('[getAdminProduct error]:', err);
+        return res.status(500).json({ error: 'Internal Server Error', message: err.message });
+    }
+}
+
 async function updateStock(req, res) {
     try {
         const skuParam = req.params.sku;
