@@ -524,6 +524,10 @@ export function stashUserOrder(order: Order) {
 }
 
 export async function placeOrder(payload: CheckoutPayload): Promise<CheckoutResult> {
+    // For Stripe and other real payment methods, never swallow errors - let
+    // checkout-view.tsx show them to the user so they know checkout failed.
+    const isRealPayment = !payload.paymentMethod || payload.paymentMethod === "STRIPE";
+
     try {
         const result = await apiFetch<CheckoutResult>("/api/checkout", {
             method: "POST",
@@ -535,7 +539,14 @@ export async function placeOrder(payload: CheckoutPayload): Promise<CheckoutResu
             stashUserOrder(result.order);
         }
         return result;
-    } catch {
+    } catch (err) {
+        // For Stripe, always re-throw so the user sees the real error
+        // instead of being silently given a fake confirmation.
+        if (isRealPayment) {
+            throw err;
+        }
+        // Only fall back to a mock order for non-Stripe methods when the
+        // backend is completely unreachable (network/CORS error, status 0).
         const orderNum = `WTN-${Math.floor(100000 + Math.random() * 900000)}`;
         const mockOrder = createMockOrder(orderNum, payload.email, payload);
         registerOrderForAdmin(mockOrder);
@@ -557,23 +568,15 @@ export async function lookupOrder(
     orderNumber: string,
     email: string,
 ): Promise<Order> {
-    try {
-        return await apiFetch<Order>("/api/orders/lookup", {
-            method: "POST",
-            body: JSON.stringify({orderNumber, email}),
-        });
-    } catch {
-        return createMockOrder(orderNumber, email);
-    }
+    return await apiFetch<Order>("/api/orders/lookup", {
+        method: "POST",
+        body: JSON.stringify({orderNumber, email}),
+    });
 }
 
 /** Reads one of the signed-in customer's own orders. */
 export async function getOrder(orderNumber: string): Promise<Order> {
-    try {
-        return await apiFetch<Order>(`/api/orders/${orderNumber}`, {cache: "no-store"});
-    } catch {
-        return createMockOrder(orderNumber, "customer@watani.com");
-    }
+    return await apiFetch<Order>(`/api/orders/${orderNumber}`, {cache: "no-store"});
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
