@@ -57,6 +57,9 @@ const CUSTOMER_NAV_ITEMS: NavItem[] = [
 
 const WEBSITE_NAV_ITEM: NavItem = {href: "/", label: "Website", icon: Globe};
 
+// Website link opens in a new tab to avoid bleeding admin auth state into storefront
+const WEBSITE_HREF = typeof window !== "undefined" ? window.location.origin : "/";
+
 const STAFF_NAV_ITEM: NavItem = {href: "/admin/staff", label: "Staff", icon: UserCog, permission: "STAFF_READ"};
 
 const ROLE_LABELS: Record<string, string> = {
@@ -165,16 +168,17 @@ export function DashboardShell({children}: { children: React.ReactNode }) {
             </nav>
 
             <div className="border-t border-black/5 p-3">
-                <Link
-                    href={WEBSITE_NAV_ITEM.href}
+                <a
+                    href="/"
+                    target="_blank"
+                    rel="noopener noreferrer"
                     onClick={() => setNavOpen(false)}
-                    className={`mb-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] font-semibold transition-colors ${
-                        pathname === "/" ? "bg-teal-950 text-white" : "text-teal-950 hover:bg-soft-control"
-                    }`}
+                    className="mb-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] font-semibold transition-colors text-teal-950 hover:bg-soft-control"
                 >
                     <Globe className="size-4.5" aria-hidden/>
                     {WEBSITE_NAV_ITEM.label}
-                </Link>
+                    <span className="ml-auto text-[11px] opacity-40">↗</span>
+                </a>
                 {admin && permissions.has("STAFF_READ") && (
                     <Link
                         href={STAFF_NAV_ITEM.href}

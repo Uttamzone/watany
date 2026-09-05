@@ -76,7 +76,8 @@ mapRoute('get', ['/v1/admin/orders/:orderNumber', '/admin/orders/:orderNumber'],
 mapRoute('put', ['/v1/admin/orders/:orderNumber/status', '/admin/orders/:orderNumber/status', '/v1/admin/orders/:orderNumber/transition', '/admin/orders/:orderNumber/transition'], verifyToken, requireAdmin, admin.updateOrderStatus);
 mapRoute('post', ['/v1/admin/orders/:orderNumber/paid', '/admin/orders/:orderNumber/paid'], verifyToken, requireAdmin, admin.markOrderPaid);
 mapRoute('post', ['/v1/admin/orders/:orderNumber/refund', '/admin/orders/:orderNumber/refund'], verifyToken, requireAdmin, admin.refundOrder);
-mapRoute('get', ['/v1/admin/reports/kpis', '/admin/reports/kpis'], verifyToken, requireAdmin, admin.getKpis);
+mapRoute('get', ['/v1/admin/dashboard', '/admin/dashboard', '/v1/admin/reports/kpis', '/admin/reports/kpis'], verifyToken, requireAdmin, admin.getKpis);
+mapRoute('get', ['/v1/admin/reports/sales', '/admin/reports/sales'], verifyToken, requireAdmin, admin.getSalesReport);
 mapRoute('get', ['/v1/admin/staff', '/admin/staff'], verifyToken, requireAdmin, admin.listStaff);
 
 /* Webhook */

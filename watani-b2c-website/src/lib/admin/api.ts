@@ -1514,7 +1514,19 @@ export function listCustomers(
         direction,
     });
     return fetchWithFallback(
-        () => apiFetch<PageResponse<CustomerResponse>>(`/api/admin/customers?${params.toString()}`),
+        async () => {
+            const res = await apiFetch<any>(`/api/admin/customers?${params.toString()}`);
+            if (Array.isArray(res)) {
+                return {
+                    content: res,
+                    page,
+                    size,
+                    totalElements: res.length,
+                    totalPages: Math.ceil(res.length / size) || 1
+                };
+            }
+            return res;
+        },
         () => {
             const filtered = email.trim()
                 ? stateCustomers.filter(c => c.email.toLowerCase().includes(email.toLowerCase()) || (c.companyName && c.companyName.toLowerCase().includes(email.toLowerCase())))

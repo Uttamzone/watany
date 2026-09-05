@@ -652,17 +652,76 @@ async function refundOrder(req, res) {
 
 async function getKpis(req, res) {
     try {
-        const salesRes = await db.query("SELECT COALESCE(SUM(grand_total), 0) as total FROM orders WHERE payment_status = 'PAID'");
-        const orderRes = await db.query("SELECT COUNT(*) as total FROM orders");
-        const customerRes = await db.query("SELECT COUNT(*) as total FROM users WHERE pricing_group != 'ADMIN'");
-        const pendingRes = await db.query("SELECT COUNT(*) as total FROM users WHERE approval_status = 'PENDING'");
+        const [salesRes, orderRes, awaitingRes, customerRes, pendingRes, lowStockRes, reviewRes] = await Promise.all([
+            db.query("SELECT COALESCE(SUM(grand_total), 0) as total FROM orders WHERE payment_status = 'PAID' AND created_at >= NOW() - INTERVAL '30 days'"),
+            db.query("SELECT COUNT(*) as total FROM orders"),
+            db.query("SELECT COUNT(*) as total FROM orders WHERE status IN ('PLACED','PROCESSING','AWAITING_PAYMENT_VERIFICATION','PENDING_PAYMENT')"),
+            db.query("SELECT COUNT(*) as total FROM users WHERE pricing_group != 'ADMIN'"),
+            db.query("SELECT COUNT(*) as total FROM users WHERE approval_status = 'PENDING'"),
+            db.query("SELECT COUNT(*) as cnt FROM product_variants WHERE stock_quantity <= COALESCE(low_stock_threshold, 10) AND stock_quantity > 0"),
+            db.query("SELECT COUNT(*) as total FROM reviews WHERE status = 'PENDING'").catch(() => ({ rows: [{total: 0}] }))
+        ]);
+
+        const revenue30 = parseFloat(salesRes.rows[0].total);
+        const totalOrders = parseInt(orderRes.rows[0].total, 10);
+        const awaitingFulfilment = parseInt(awaitingRes.rows[0].total, 10);
+        const totalCustomers = parseInt(customerRes.rows[0].total, 10);
+        const pending = parseInt(pendingRes.rows[0].total, 10);
+        const lowStock = parseInt(lowStockRes.rows[0].cnt, 10) || 0;
+        const pendingReviews = parseInt(reviewRes.rows[0].total, 10) || 0;
 
         return res.json({
-            totalRevenue: parseFloat(salesRes.rows[0].total),
-            totalOrders: parseInt(orderRes.rows[0].total, 10),
-            totalCustomers: parseInt(customerRes.rows[0].total, 10),
-            pendingApprovals: parseInt(pendingRes.rows[0].total, 10)
+            // Legacy field names (used by old dashboard cards)
+            totalRevenue: revenue30,
+            totalOrders,
+            totalCustomers,
+            pendingApprovals: pending,
+            // DashboardKpis fields expected by new admin dashboard
+            revenue30Days: revenue30,
+            ordersTotal: totalOrders,
+            ordersAwaitingFulfilment: awaitingFulfilment,
+            averageOrderValue: totalOrders > 0 ? Math.round((revenue30 / totalOrders) * 100) / 100 : 0,
+            lowStockCount: lowStock,
+            pendingReviews
         });
+    } catch (err) {
+        return res.status(500).json({ error: 'Internal Server Error', message: err.message });
+    }
+}
+
+async function getSalesReport(req, res) {
+    try {
+        const dimension = req.query.dimension || 'day';
+        const days = parseInt(req.query.days, 10) || 30;
+
+        let groupExpr, labelExpr;
+        if (dimension === 'week') {
+            groupExpr = "DATE_TRUNC('week', created_at)";
+            labelExpr = "TO_CHAR(DATE_TRUNC('week', created_at), 'IYYY') || '-W' || TO_CHAR(DATE_TRUNC('week', created_at), 'IW')";
+        } else if (dimension === 'month') {
+            groupExpr = "DATE_TRUNC('month', created_at)";
+            labelExpr = "TO_CHAR(DATE_TRUNC('month', created_at), 'YYYY-MM')";
+        } else {
+            groupExpr = "DATE_TRUNC('day', created_at)";
+            labelExpr = "TO_CHAR(DATE_TRUNC('day', created_at), 'YYYY-MM-DD') || 'T00:00:00Z'";
+        }
+
+        const { rows } = await db.query(`
+            SELECT ${labelExpr} as label,
+                   COUNT(*) as "orderCount",
+                   COALESCE(SUM(grand_total), 0) as revenue
+            FROM orders
+            WHERE payment_status = 'PAID'
+              AND created_at >= NOW() - INTERVAL '${days} days'
+            GROUP BY ${groupExpr}
+            ORDER BY ${groupExpr} ASC;
+        `);
+
+        return res.json(rows.map(r => ({
+            label: r.label,
+            orderCount: parseInt(r.orderCount, 10),
+            revenue: parseFloat(r.revenue)
+        })));
     } catch (err) {
         return res.status(500).json({ error: 'Internal Server Error', message: err.message });
     }
@@ -781,5 +840,6 @@ module.exports = {
     markOrderPaid,
     refundOrder,
     getKpis,
+    getSalesReport,
     listStaff
 };
