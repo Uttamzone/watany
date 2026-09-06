@@ -131,7 +131,7 @@ export default function AdminOrderDetailPage({
         try {
             await adminApi.deleteOrder(orderNumber);
             notifications.success("Order deleted", `Order ${orderNumber} has been permanently deleted.`);
-            router.push("/admin/orders");
+            router.replace("/admin/orders");
         } catch (err) {
             const message = err instanceof ApiError ? err.message : "Failed to delete order.";
             notifications.error("Delete order failed", message);
@@ -142,7 +142,29 @@ export default function AdminOrderDetailPage({
 
     if (!order) {
         return error ? (
-            <p className="rounded-xl bg-coral/10 px-4 py-3 text-[14px] font-medium text-coral">{error}</p>
+            <div className="space-y-4">
+                <Link
+                    href="/admin/orders"
+                    className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-muted transition-colors hover:text-teal-950"
+                >
+                    <ArrowLeft className="size-3.5" aria-hidden/>
+                    Orders
+                </Link>
+                <div className="rounded-2xl border border-coral/20 bg-coral/10 p-6">
+                    <h2 className="text-[16px] font-bold text-coral">Order Unavailable</h2>
+                    <p className="mt-1 text-[13px] text-teal-950">
+                        {error.includes("404") || error.toLowerCase().includes("not found") || error.toLowerCase().includes("deleted")
+                            ? `Order #${orderNumber} was not found or has been deleted.`
+                            : error}
+                    </p>
+                    <Link
+                        href="/admin/orders"
+                        className="mt-4 inline-flex h-9 items-center rounded-xl bg-teal-950 px-4 text-[13px] font-semibold text-white transition-colors hover:bg-teal-900"
+                    >
+                        Return to Orders List
+                    </Link>
+                </div>
+            </div>
         ) : (
             <p className="text-muted">Loading…</p>
         );
@@ -232,7 +254,7 @@ export default function AdminOrderDetailPage({
                         <h2 className="text-[15px] font-bold text-teal-950">Items</h2>
                         <table className="mt-3 w-full text-left text-[14px]">
                             <tbody>
-                            {order.items.map((line) => (
+                            {(order.items || []).map((line) => (
                                 <tr key={line.sku} className="border-b border-black/5 last:border-0">
                                     <td className="py-2">
                                         <p className="font-semibold text-teal-950">{line.productName}</p>
@@ -259,7 +281,7 @@ export default function AdminOrderDetailPage({
                             <h2 className="text-[15px] font-bold text-teal-950">Order Timeline</h2>
                         </div>
                         <div className="mt-4">
-                            <OrderTimeline events={order.timeline}/>
+                            <OrderTimeline events={order.timeline || []}/>
                         </div>
                     </div>
                 </div>
@@ -306,13 +328,17 @@ export default function AdminOrderDetailPage({
 
                     <div className="rounded-2xl bg-white p-5 shadow-card">
                         <h2 className="text-[15px] font-bold text-teal-950">Shipping address</h2>
-                        <p className="mt-2 text-[13px] text-teal-950">
-                            {order.shippingAddress.fullName}<br/>
-                            {order.shippingAddress.line1}
-                            {order.shippingAddress.line2 && <>, {order.shippingAddress.line2}</>}<br/>
-                            {order.shippingAddress.city}, {order.shippingAddress.region} {order.shippingAddress.postalCode}<br/>
-                            {order.shippingAddress.country}
-                        </p>
+                        {order.shippingAddress ? (
+                            <p className="mt-2 text-[13px] text-teal-950">
+                                {order.shippingAddress.fullName || "—"}<br/>
+                                {order.shippingAddress.line1}
+                                {order.shippingAddress.line2 && <>, {order.shippingAddress.line2}</>}<br/>
+                                {[order.shippingAddress.city, order.shippingAddress.region, order.shippingAddress.postalCode].filter(Boolean).join(", ")}<br/>
+                                {order.shippingAddress.country}
+                            </p>
+                        ) : (
+                            <p className="mt-2 text-[13px] text-muted italic">No shipping address recorded</p>
+                        )}
                     </div>
 
                     <OrderShipPanel

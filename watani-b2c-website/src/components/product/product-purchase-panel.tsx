@@ -3,14 +3,13 @@
 import {useEffect, useState} from "react";
 import Link from "next/link";
 import {useRouter} from "next/navigation";
-import {Heart, Leaf, Minus, Plus, ShoppingCart, Star, Truck} from "lucide-react";
+import {ChevronDown, Heart, Leaf, Minus, Plus, ShoppingCart, Star, Truck} from "lucide-react";
 import {useCart} from "@/components/cart/cart-store";
 import {useWishlist} from "@/components/wishlist/wishlist-store";
 import {useAuth} from "@/components/auth/auth-store";
 import {Price} from "./price";
 import {type Product, safeFormatPrice} from "@/lib/types";
 import {categories} from "@/lib/catalogue";
-import {sanitizeRichText} from "@/lib/rich-text";
 
 /** Product purchase panel (design.md §8 right column); conditional rows are omitted, not faked, when data is absent. */
 export function ProductPurchasePanel({product}: { product: Product }) {
@@ -29,6 +28,7 @@ export function ProductPurchasePanel({product}: { product: Product }) {
         1;
 
     const [quantity, setQuantity] = useState(moq);
+    const [descExpanded, setDescExpanded] = useState(false);
 
     useEffect(() => {
         setQuantity(moq);
@@ -213,23 +213,16 @@ export function ProductPurchasePanel({product}: { product: Product }) {
 
             <hr className="my-6 border-black/[0.07]"/>
 
-            {/* Product attribute tags — clean, no circles */}
-            <div className="flex flex-wrap gap-2">
-                {[
-                    {icon: Leaf, label: categoryName || product.category || "Authentic Product"},
-                    {icon: Truck, label: "Ships to Canada & USA"},
-                ].map((attribute) => {
-                    const Icon = attribute.icon;
-                    return (
-                        <span
-                            key={attribute.label}
-                            className="inline-flex items-center gap-1.5 rounded-full border border-black/8 bg-soft-control px-3 py-1.5 text-[12px] font-semibold text-teal-950"
-                        >
-                            <Icon className="size-3.5 opacity-70" aria-hidden/>
-                            {attribute.label}
-                        </span>
-                    );
-                })}
+            {/* Product attribute highlights — clean text + modern subtle icons, no circular badge UI */}
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-[13px] font-medium text-teal-950">
+                <span className="inline-flex items-center gap-1.5">
+                    <Leaf className="size-4 text-emerald-600" aria-hidden/>
+                    {categoryName || product.category || "Authentic Palestinian Product"}
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                    <Truck className="size-4 text-teal-700" aria-hidden/>
+                    Ships to Canada & USA
+                </span>
             </div>
 
             <dl className="mt-4 space-y-1.5 text-[13px]">
@@ -256,18 +249,39 @@ export function ProductPurchasePanel({product}: { product: Product }) {
                 </div>
             </dl>
 
+            {/* Inline description — clamped to 3 lines by default, expandable */}
             {(() => {
                 const descText = product.description || product.subtitle || "";
                 if (!descText || descText.trim().length === 0) return null;
                 const isHtml = /<[a-zA-Z][^>]*>/.test(descText);
-                const safeHtml = isHtml
-                    ? sanitizeRichText(descText + (descText.includes("<p>") && !descText.endsWith("</p>") ? "</p>" : ""))
-                    : `<p>${descText}</p>`;
+                const plainText = isHtml
+                    ? descText.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+                    : descText.trim();
                 return (
-                    <div
-                        className="rich-text mt-6 border-t border-black/5 pt-4 text-[14px] leading-relaxed text-muted"
-                        dangerouslySetInnerHTML={{ __html: safeHtml }}
-                    />
+                    <div className="mt-5 border-t border-black/5 pt-4">
+                        <p
+                            className={`text-[13px] leading-relaxed text-muted transition-all ${
+                                descExpanded ? "" : "line-clamp-3"
+                            }`}
+                        >
+                            {plainText}
+                        </p>
+                        {plainText.length > 180 && (
+                            <button
+                                type="button"
+                                onClick={() => setDescExpanded((v) => !v)}
+                                className="mt-1.5 inline-flex items-center gap-1 text-[12px] font-semibold text-teal-700 hover:text-teal-900 transition-colors"
+                            >
+                                {descExpanded ? "Show less" : "Read more"}
+                                <ChevronDown
+                                    className={`size-3.5 transition-transform duration-200 ${
+                                        descExpanded ? "rotate-180" : ""
+                                    }`}
+                                    aria-hidden
+                                />
+                            </button>
+                        )}
+                    </div>
                 );
             })()}
         </div>

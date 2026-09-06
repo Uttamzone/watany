@@ -3,9 +3,9 @@
 import {useEffect, useState} from "react";
 import Link from "next/link";
 import {useRouter} from "next/navigation";
-import {Eye, Trash2} from "lucide-react";
+import {BadgeCheck, Eye, Play, Trash2} from "lucide-react";
 import * as adminApi from "@/lib/admin/api";
-import type {OrderResponse, OrderSortField, SortDirection} from "@/lib/admin/types";
+import type {OrderResponse, OrderSortField, OrderStatus, SortDirection} from "@/lib/admin/types";
 import {AdminTable, type AdminTableColumn} from "@/components/admin/admin-table";
 import {StatusBadge} from "@/components/admin/status-badge";
 import {ConfirmDialog} from "@/components/admin/confirm-dialog";
@@ -43,6 +43,7 @@ export default function AdminOrdersPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [deletingOrder, setDeletingOrder] = useState<OrderResponse | null>(null);
+    const [markingPaidOrder, setMarkingPaidOrder] = useState<OrderResponse | null>(null);
     const router = useRouter();
 
     function reload() {
@@ -63,7 +64,24 @@ export default function AdminOrdersPage() {
     }
 
     useEffect(() => {
+        setLoading(true);
         reload();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [page, sortKey, sortDirection]);
+
+    // Re-fetch when user navigates back to this tab or window gains focus
+    useEffect(() => {
+        function handleVisibilityOrFocus() {
+            if (document.visibilityState === "visible") {
+                reload();
+            }
+        }
+        document.addEventListener("visibilitychange", handleVisibilityOrFocus);
+        window.addEventListener("focus", handleVisibilityOrFocus);
+        return () => {
+            document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
+            window.removeEventListener("focus", handleVisibilityOrFocus);
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [page, sortKey, sortDirection]);
 
@@ -89,13 +107,41 @@ export default function AdminOrdersPage() {
         try {
             await adminApi.deleteOrder(targetNumber);
             notifications.success("Order deleted", `Order ${targetNumber} has been removed.`);
+            // Optimistic removal then reload for accuracy
             setItems((prev) => prev.filter((o) => o.orderNumber !== targetNumber));
             setTotalElements((prev) => Math.max(0, prev - 1));
+            reload();
         } catch (err) {
             const message = err instanceof ApiError ? err.message : "Failed to delete order.";
             notifications.error("Failed to delete order", message);
         } finally {
             setDeletingOrder(null);
+        }
+    }
+
+    async function handleQuickMarkPaid() {
+        if (!markingPaidOrder) return;
+        const targetNumber = markingPaidOrder.orderNumber;
+        try {
+            const updated = await adminApi.markOrderPaid(targetNumber, {});
+            notifications.success("Marked as Paid", `Order ${targetNumber} payment verified.`);
+            setItems((prev) => prev.map((o) => (o.orderNumber === targetNumber ? updated : o)));
+            reload();
+        } catch (err) {
+            notifications.error("Mark as paid failed", err instanceof ApiError ? err.message : "Failed to mark as paid.");
+        } finally {
+            setMarkingPaidOrder(null);
+        }
+    }
+
+    async function handleQuickTransition(orderNumber: string, status: OrderStatus) {
+        try {
+            const updated = await adminApi.transitionOrder(orderNumber, { status });
+            notifications.success("Status updated", `Order ${orderNumber} is now ${status.replace(/_/g, " ").toLowerCase()}.`);
+            setItems((prev) => prev.map((o) => (o.orderNumber === orderNumber ? updated : o)));
+            reload();
+        } catch (err) {
+            notifications.error("Status update failed", err instanceof ApiError ? err.message : "Failed to update status.");
         }
     }
 
@@ -183,15 +229,34 @@ export default function AdminOrdersPage() {
             header: "",
             className: "text-right",
             render: (row) => {
+                const isPaid = row.paymentStatus === "PAID" || row.paymentStatus === "CAPTURED";
                 const actions: RowAction[] = [
                     {label: "View order", icon: Eye, onSelect: () => router.push(`/admin/orders/${row.orderNumber}`)},
-                    {
-                        label: "Delete order",
-                        icon: Trash2,
-                        tone: "danger",
-                        onSelect: () => setDeletingOrder(row),
-                    },
                 ];
+
+                if (!isPaid && row.status !== "CANCELLED") {
+                    actions.push({
+                        label: "Mark as paid",
+                        icon: BadgeCheck,
+                        onSelect: () => setMarkingPaidOrder(row),
+                    });
+                }
+
+                if (row.status === "PLACED" || (isPaid && row.status === "PAID")) {
+                    actions.push({
+                        label: "Mark as processing",
+                        icon: Play,
+                        onSelect: () => handleQuickTransition(row.orderNumber, "PROCESSING"),
+                    });
+                }
+
+                actions.push({
+                    label: "Delete order",
+                    icon: Trash2,
+                    tone: "danger",
+                    onSelect: () => setDeletingOrder(row),
+                });
+
                 return <RowActions actions={actions} label={`Actions for order ${row.orderNumber}`}/>;
             },
         },
@@ -228,6 +293,15 @@ export default function AdminOrdersPage() {
                 danger
                 onCancel={() => setDeletingOrder(null)}
                 onConfirm={handleDeleteOrder}
+            />
+
+            <ConfirmDialog
+                open={markingPaidOrder !== null}
+                title={`Mark order ${markingPaidOrder?.orderNumber} as paid?`}
+                description={`Confirm payment verification for ${money(markingPaidOrder?.grandTotal ?? 0, markingPaidOrder?.currency ?? "CAD")}.`}
+                confirmLabel="Mark as Paid"
+                onCancel={() => setMarkingPaidOrder(null)}
+                onConfirm={handleQuickMarkPaid}
             />
         </div>
     );

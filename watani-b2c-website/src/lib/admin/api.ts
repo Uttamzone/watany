@@ -364,8 +364,40 @@ let statePalletShipping: PalletShippingSettingsResponse = {
 };
 
 const ADMIN_ORDERS_STORAGE_KEY = "watani.adminOrders.v1";
+const ADMIN_DELETED_ORDERS_KEY = "watani.adminDeletedOrders.v1";
 const ADMIN_REVIEWS_STORAGE_KEY = "watani.adminReviews.v1";
 const ADMIN_CUSTOMERS_STORAGE_KEY = "watani.adminCustomers.v1";
+
+export function getDeletedOrderNumbers(): Set<string> {
+    if (typeof window === "undefined") return new Set();
+    try {
+        const raw = window.localStorage.getItem(ADMIN_DELETED_ORDERS_KEY);
+        return new Set(raw ? JSON.parse(raw) : []);
+    } catch {
+        return new Set();
+    }
+}
+
+export function recordOrderDeleted(orderNumber: string): void {
+    if (typeof window === "undefined") return;
+    try {
+        const set = getDeletedOrderNumbers();
+        set.add(orderNumber);
+        window.localStorage.setItem(ADMIN_DELETED_ORDERS_KEY, JSON.stringify(Array.from(set)));
+        stateOrders = stateOrders.filter(o => o.orderNumber !== orderNumber);
+        window.localStorage.setItem(ADMIN_ORDERS_STORAGE_KEY, JSON.stringify(stateOrders.slice(0, 100)));
+        const rawUser = window.localStorage.getItem("watani_user_orders");
+        if (rawUser) {
+            const userOrders = JSON.parse(rawUser);
+            if (Array.isArray(userOrders)) {
+                window.localStorage.setItem(
+                    "watani_user_orders",
+                    JSON.stringify(userOrders.filter((o: any) => o && o.orderNumber !== orderNumber))
+                );
+            }
+        }
+    } catch {}
+}
 
 export function persistCustomersState(): void {
     if (typeof window !== "undefined") {
@@ -407,13 +439,16 @@ let stateReviews: Review[] = [
 function syncOrdersFromStorage() {
     if (typeof window === "undefined") return;
     try {
+        const deletedNumbers = getDeletedOrderNumbers();
+        stateOrders = stateOrders.filter(o => !deletedNumbers.has(o.orderNumber));
+
         const raw = window.localStorage.getItem(ADMIN_ORDERS_STORAGE_KEY);
         if (raw) {
             const parsed = JSON.parse(raw) as OrderResponse[];
             if (Array.isArray(parsed) && parsed.length > 0) {
                 const existingOrderNums = new Set(stateOrders.map(o => o.orderNumber));
                 for (const o of parsed) {
-                    if (!existingOrderNums.has(o.orderNumber)) {
+                    if (!deletedNumbers.has(o.orderNumber) && !existingOrderNums.has(o.orderNumber)) {
                         stateOrders.push(o);
                         existingOrderNums.add(o.orderNumber);
                     }
@@ -425,7 +460,7 @@ function syncOrdersFromStorage() {
             const userOrders = JSON.parse(rawUser) as any[];
             if (Array.isArray(userOrders)) {
                 for (const uo of userOrders) {
-                    if (uo && uo.orderNumber) {
+                    if (uo && uo.orderNumber && !deletedNumbers.has(uo.orderNumber)) {
                         registerOrderForAdmin(uo);
                     }
                 }
@@ -567,12 +602,16 @@ export function registerOrderForAdmin(order: any): void {
 export function persistOrdersState(): void {
     if (typeof window !== "undefined") {
         try {
+            const deletedNumbers = getDeletedOrderNumbers();
+            stateOrders = stateOrders.filter(o => !deletedNumbers.has(o.orderNumber));
             window.localStorage.setItem(ADMIN_ORDERS_STORAGE_KEY, JSON.stringify(stateOrders.slice(0, 100)));
             const userOrdersRaw = window.localStorage.getItem("watani_user_orders");
             if (userOrdersRaw) {
                 const userOrders: OrderResponse[] = JSON.parse(userOrdersRaw);
                 const adminMap = new Map(stateOrders.map(o => [o.orderNumber, o]));
-                const updatedUserOrders = userOrders.map(uo => adminMap.get(uo.orderNumber) ?? uo);
+                const updatedUserOrders = userOrders
+                    .filter(uo => !deletedNumbers.has(uo.orderNumber))
+                    .map(uo => adminMap.get(uo.orderNumber) ?? uo);
                 window.localStorage.setItem("watani_user_orders", JSON.stringify(updatedUserOrders));
             }
         } catch {}
@@ -1224,12 +1263,15 @@ export function listOrders(
     return fetchWithFallback(
         async () => {
             const res = await apiFetch<PageResponse<OrderResponse>>(`/api/admin/orders?${params.toString()}`);
-            let content = Array.isArray(res) ? res : (res?.content || []);
+            const deletedNumbers = getDeletedOrderNumbers();
+            let content = (Array.isArray(res) ? res : (res?.content || [])).filter(
+                (o: OrderResponse) => !deletedNumbers.has(o.orderNumber)
+            );
             if (typeof window !== "undefined") {
                 syncOrdersFromStorage();
-                const existingNos = new Set(content.map(o => o.orderNumber));
+                const existingNos = new Set(content.map((o: OrderResponse) => o.orderNumber));
                 for (const localOrder of stateOrders) {
-                    if (!existingNos.has(localOrder.orderNumber)) {
+                    if (!deletedNumbers.has(localOrder.orderNumber) && !existingNos.has(localOrder.orderNumber)) {
                         content.unshift(localOrder);
                         existingNos.add(localOrder.orderNumber);
                     }
@@ -1246,18 +1288,24 @@ export function listOrders(
             if (typeof window !== "undefined") {
                 syncOrdersFromStorage();
             }
+            const deletedNumbers = getDeletedOrderNumbers();
+            const activeOrders = stateOrders.filter(o => !deletedNumbers.has(o.orderNumber));
             return {
-                content: stateOrders,
+                content: activeOrders,
                 page,
                 size,
-                totalElements: stateOrders.length,
-                totalPages: Math.ceil(stateOrders.length / size) || 1,
+                totalElements: activeOrders.length,
+                totalPages: Math.ceil(activeOrders.length / size) || 1,
             };
         }
     );
 }
 
 export function getOrder(orderNumber: string): Promise<AdminOrderDetail> {
+    const deletedNumbers = getDeletedOrderNumbers();
+    if (deletedNumbers.has(orderNumber)) {
+        return Promise.reject(new ApiError(`Order ${orderNumber} not found.`, 404));
+    }
     return fetchWithFallback(
         async () => {
             const detail = await apiFetch<AdminOrderDetail>(`/api/admin/orders/${encodeURIComponent(orderNumber)}`);
@@ -1273,7 +1321,10 @@ export function getOrder(orderNumber: string): Promise<AdminOrderDetail> {
             if (typeof window !== "undefined") {
                 syncOrdersFromStorage();
             }
-            const match = stateOrders.find(o => o.orderNumber === orderNumber) ?? stateOrders[0];
+            const match = stateOrders.find(o => o.orderNumber === orderNumber);
+            if (!match) {
+                throw new ApiError(`Order ${orderNumber} not found.`, 404);
+            }
             return {
                 order: match,
                 carrierCost: 18.50,
@@ -1410,17 +1461,16 @@ export function refundOrder(orderNumber: string, payload: RefundRequest): Promis
 }
 
 export function deleteOrder(orderNumber: string): Promise<void> {
+    recordOrderDeleted(orderNumber);
     return fetchWithFallback(
         async () => {
             await apiFetch<void>(`/api/admin/orders/${encodeURIComponent(orderNumber)}`, {
                 method: "DELETE",
             });
-            stateOrders = stateOrders.filter(o => o.orderNumber !== orderNumber);
-            persistOrdersState();
+            recordOrderDeleted(orderNumber);
         },
         () => {
-            stateOrders = stateOrders.filter(o => o.orderNumber !== orderNumber);
-            persistOrdersState();
+            recordOrderDeleted(orderNumber);
         }
     );
 }
@@ -1434,30 +1484,52 @@ export function getOrderBoxes(orderNumber: string): Promise<OrderBoxResponse[]> 
 
 export function packOrder(orderNumber: string, payload: ReplaceBoxesRequest): Promise<BoxesResponse> {
     return fetchWithFallback(
-        () => apiFetch<BoxesResponse>(`/api/admin/orders/${encodeURIComponent(orderNumber)}/boxes`, {
-            method: "PUT",
-            body: JSON.stringify(payload),
-        }),
-        () => ({
-            boxes: payload.boxes.map((b, i) => ({
-                id: Date.now() + i,
-                sequence: i + 1,
-                weightGrams: b.weightGrams,
-                lengthIn: b.lengthIn,
-                widthIn: b.widthIn,
-                heightIn: b.heightIn,
-                label: b.label ?? null,
-                autoGenerated: false,
-                items: b.items.map((it, j) => ({
-                    id: Date.now() + j,
-                    orderItemId: it.orderItemId,
-                    productName: "Item " + it.orderItemId,
-                    sku: "SKU-" + it.orderItemId,
-                    quantity: it.quantity
-                }))
-            })),
-            order: stateOrders[0]
-        })
+        async () => {
+            const res = await apiFetch<BoxesResponse>(`/api/admin/orders/${encodeURIComponent(orderNumber)}/boxes`, {
+                method: "PUT",
+                body: JSON.stringify(payload),
+            });
+            if (res && res.order) {
+                const idx = stateOrders.findIndex(o => o.orderNumber === orderNumber);
+                if (idx !== -1) stateOrders[idx] = res.order;
+                else stateOrders.unshift(res.order);
+                persistOrdersState();
+            }
+            return res;
+        },
+        () => {
+            const match = stateOrders.find(o => o.orderNumber === orderNumber);
+            if (match) {
+                match.status = "PACKED";
+                if (!match.timeline) match.timeline = [];
+                match.timeline.push({
+                    status: "PACKED",
+                    message: `Order packed in ${payload.boxes.length} box(es)`,
+                    at: new Date().toISOString()
+                });
+                persistOrdersState();
+            }
+            return {
+                boxes: payload.boxes.map((b, i) => ({
+                    id: Date.now() + i,
+                    sequence: i + 1,
+                    weightGrams: b.weightGrams,
+                    lengthIn: b.lengthIn,
+                    widthIn: b.widthIn,
+                    heightIn: b.heightIn,
+                    label: b.label ?? null,
+                    autoGenerated: false,
+                    items: b.items.map((it, j) => ({
+                        id: Date.now() + j,
+                        orderItemId: it.orderItemId,
+                        productName: "Item " + it.orderItemId,
+                        sku: "SKU-" + it.orderItemId,
+                        quantity: it.quantity
+                    }))
+                })),
+                order: match || stateOrders[0]
+            };
+        }
     );
 }
 

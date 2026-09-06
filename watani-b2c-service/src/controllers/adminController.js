@@ -2209,7 +2209,18 @@ async function updateOrderBoxes(req, res) {
                 items: b.items || []
             });
         }
-        return res.json({ boxes: saved });
+        await db.query(`
+            UPDATE orders
+            SET status = CASE WHEN status IN ('PLACED', 'PENDING_PAYMENT', 'AWAITING_PAYMENT_VERIFICATION', 'PROCESSING') THEN 'PACKED' ELSE status END,
+                updated_at = NOW()
+            WHERE id = $1;
+        `, [orderId]);
+        const updatedOrderRes = await db.query('SELECT * FROM orders WHERE id = $1', [orderId]);
+        const itemsRes = await db.query('SELECT * FROM order_items WHERE order_id = $1', [orderId]);
+        return res.json({
+            boxes: saved,
+            order: formatOrderRow(updatedOrderRes.rows[0], itemsRes.rows)
+        });
     } catch (err) {
         return res.status(500).json({ error: 'Internal Server Error', message: err.message });
     }

@@ -185,7 +185,9 @@ export function OrderPackPanel({
             };
             const result = await adminApi.packOrder(order.orderNumber, payload);
             setSavedBoxes(result.boxes);
-            onPacked(result.order);
+            if (result.order) {
+                onPacked(result.order);
+            }
             notifications.success(
                 "Order packed",
                 `${result.boxes.length} box(es) recorded; ready to ship.`,
