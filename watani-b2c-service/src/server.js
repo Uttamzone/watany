@@ -13,6 +13,7 @@ const PORT = process.env.PORT || 8080;
 
 // Trust reverse proxy (Traefik / Nginx) so req.secure, req.ip, and X-Forwarded-* headers work properly
 app.set('trust proxy', 1);
+app.disable('x-powered-by');
 
 // Cookie parser middleware (lightweight, zero-dependency)
 app.use((req, res, next) => {
@@ -86,21 +87,24 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Vary header filter
+// Security & Vary headers
 app.use((req, res, next) => {
     res.setHeader('Vary', 'Authorization');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
     next();
 });
 
-// Static uploads serving
+// Static uploads serving with HTTP cache headers
 const uploadsDir = process.env.STORAGE_DIR || path.join(__dirname, '../uploads');
 if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });
 }
-app.use('/uploads', express.static(uploadsDir));
+app.use('/uploads', express.static(uploadsDir, { maxAge: '7d' }));
 const publicUploads = path.join(__dirname, '../../watani-b2c-website/public/uploads');
 if (fs.existsSync(publicUploads)) {
-    app.use('/uploads', express.static(publicUploads));
+    app.use('/uploads', express.static(publicUploads, { maxAge: '7d' }));
 }
 
 // API Routes

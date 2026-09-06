@@ -1664,7 +1664,30 @@ async function moderateReview(req, res) {
         if (rows.length === 0) {
             return res.json({ id: parseInt(id, 10), authorName: 'Customer', rating: 5, title: 'Review', body: '', status });
         }
-        return res.json(rows[0]);
+
+        const review = rows[0];
+        if (review.productId) {
+            try {
+                const statRes = await db.query(`
+                    SELECT COALESCE(AVG(rating), 5.0) as avg, COUNT(*) as cnt
+                    FROM reviews
+                    WHERE product_id = $1 AND status = 'APPROVED';
+                `, [review.productId]);
+                if (statRes.rows.length > 0) {
+                    const avgRating = parseFloat(statRes.rows[0].avg).toFixed(1);
+                    const reviewCount = parseInt(statRes.rows[0].cnt, 10);
+                    await db.query(`UPDATE products SET rating_average = $1, review_count = $2 WHERE id = $3`, [
+                        avgRating,
+                        reviewCount,
+                        review.productId
+                    ]);
+                }
+            } catch (e) {
+                console.warn('[moderateReview rating recalculate error]:', e.message);
+            }
+        }
+
+        return res.json(review);
     } catch (err) {
         return res.status(500).json({ error: 'Internal Server Error', message: err.message });
     }

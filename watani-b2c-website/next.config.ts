@@ -3,7 +3,16 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // Ships only needed node_modules files, not the full tree - see Dockerfile.
   output: "standalone",
+  // Disable X-Powered-By header to avoid framework fingerprinting
+  poweredByHeader: false,
+  // Enable HTTP compression for smaller transfer sizes and faster page loads
+  compress: true,
+  experimental: {
+    // Optimize bundle size by tree-shaking heavy icon and animation packages
+    optimizePackageImports: ["lucide-react", "framer-motion"],
+  },
   images: {
+    formats: ["image/avif", "image/webp"],
     // Next 16 blocks optimizing images from local IPs by default; backend runs on localhost:8080 in dev.
     dangerouslyAllowLocalIP: process.env.NODE_ENV === "development",
     remotePatterns: [
@@ -44,6 +53,39 @@ const nextConfig: NextConfig = {
         pathname: "/uploads/**",
       },
     ],
+  },
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          {
+            key: "X-Frame-Options",
+            value: "SAMEORIGIN",
+          },
+          {
+            key: "X-Content-Type-Options",
+            value: "nosniff",
+          },
+          {
+            key: "Referrer-Policy",
+            value: "strict-origin-when-cross-origin",
+          },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=()",
+          },
+          {
+            key: "X-XSS-Protection",
+            value: "1; mode=block",
+          },
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=31536000; includeSubDomains; preload",
+          },
+        ],
+      },
+    ];
   },
 };
 

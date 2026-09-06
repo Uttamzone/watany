@@ -408,6 +408,27 @@ export async function getProductReviews(slug: string): Promise<ProductReview[]> 
     }
 }
 
+export async function submitProductReview(
+    slug: string,
+    review: { rating: number; authorName?: string; title?: string; body?: string }
+): Promise<ProductReview> {
+    const dto = await apiFetch<ApiReview>(
+        `/api/catalogue/products/${encodeURIComponent(slug)}/reviews`,
+        {
+            method: "POST",
+            body: JSON.stringify(review),
+        },
+    );
+    return {
+        id: String(dto.id),
+        authorName: dto.authorName,
+        rating: dto.rating,
+        title: dto.title ?? undefined,
+        body: dto.body ?? undefined,
+        createdAt: dto.createdAt || new Date().toISOString(),
+    };
+}
+
 export async function getShippingPolicy(): Promise<string | null> {
     try {
         const block = await apiFetch<{ payload: string | null }>(

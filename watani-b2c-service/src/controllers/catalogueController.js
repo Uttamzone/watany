@@ -265,8 +265,83 @@ async function getProductBySlug(req, res) {
     }
 }
 
+async function getProductReviews(req, res) {
+    try {
+        const { slug } = req.params;
+        const pRes = await db.query('SELECT id, name FROM products WHERE slug = $1 OR id::text = $1 LIMIT 1', [slug]);
+        if (pRes.rows.length === 0) {
+            return res.json([]);
+        }
+        const productId = pRes.rows[0].id;
+        const { rows } = await db.query(`
+            SELECT id, product_id as "productId", author_name as "authorName",
+                   rating, title, body, created_at as "createdAt"
+            FROM reviews
+            WHERE product_id = $1 AND status = 'APPROVED'
+            ORDER BY created_at DESC;
+        `, [productId]);
+
+        return res.json(rows);
+    } catch (err) {
+        console.error('[getProductReviews error]:', err);
+        return res.status(500).json({ error: 'Internal Server Error', message: err.message });
+    }
+}
+
+async function createProductReview(req, res) {
+    try {
+        const { slug } = req.params;
+        const { rating, title, body, authorName } = req.body || {};
+        const numRating = Math.max(1, Math.min(5, parseInt(rating, 10) || 5));
+
+        const pRes = await db.query('SELECT id, name FROM products WHERE slug = $1 OR id::text = $1 LIMIT 1', [slug]);
+        if (pRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Not Found', message: 'Product not found' });
+        }
+        const product = pRes.rows[0];
+
+        let reviewerName = (authorName || '').trim();
+        let userId = null;
+        if (req.user) {
+            userId = req.user.id;
+            if (!reviewerName) {
+                reviewerName = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || req.user.email;
+            }
+        }
+        if (!reviewerName) reviewerName = 'Verified Customer';
+
+        const { rows } = await db.query(`
+            INSERT INTO reviews (product_id, product_name, user_id, author_name, rating, title, body, status, created_at, updated_at, version)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 'APPROVED', NOW(), NOW(), 0)
+            RETURNING id, product_id as "productId", author_name as "authorName", rating, title, body, status, created_at as "createdAt";
+        `, [product.id, product.name, userId, reviewerName, numRating, (title || '').trim() || null, (body || '').trim() || null]);
+
+        try {
+            const statRes = await db.query(`
+                SELECT COALESCE(AVG(rating), 5.0) as avg, COUNT(*) as cnt
+                FROM reviews
+                WHERE product_id = $1 AND status = 'APPROVED';
+            `, [product.id]);
+            if (statRes.rows.length > 0) {
+                const avgRating = parseFloat(statRes.rows[0].avg).toFixed(1);
+                const reviewCount = parseInt(statRes.rows[0].cnt, 10);
+                await db.query(`UPDATE products SET rating_average = $1, review_count = $2 WHERE id = $3`, [avgRating, reviewCount, product.id]);
+            }
+        } catch (e) {
+            console.warn('[recalculateRating error]:', e.message);
+        }
+
+        return res.status(201).json(rows[0]);
+    } catch (err) {
+        console.error('[createProductReview error]:', err);
+        return res.status(500).json({ error: 'Internal Server Error', message: err.message });
+    }
+}
+
 module.exports = {
     getCategories,
     getProducts,
-    getProductBySlug
+    getProductBySlug,
+    getProductReviews,
+    createProductReview
 };

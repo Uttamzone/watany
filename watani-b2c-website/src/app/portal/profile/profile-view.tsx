@@ -6,6 +6,7 @@ import {useAuth} from "@/components/auth/auth-store";
 import {useNotifications} from "@/components/notifications/notification-store";
 import {ApiError} from "@/lib/api";
 import {changePassword, getUserInitials, updateProfile} from "@/lib/auth";
+import {isAdminRole} from "@/lib/admin/permissions";
 import {UpgradeAccountModal} from "@/components/auth/upgrade-account-modal";
 import {
     createMyAddress,
@@ -325,7 +326,7 @@ function B2BProgramSection() {
     const [modalOpen, setModalOpen] = useState(false);
     const [targetGroup, setTargetGroup] = useState<"WHOLESALE" | "DISTRIBUTOR">("WHOLESALE");
 
-    if (!user) return null;
+    if (!user || isAdminRole(user.roles) || user.pricingGroup === "ADMIN") return null;
 
     const isDistributor = user.pricingGroup === "DISTRIBUTOR";
     const isWholesale = user.pricingGroup === "WHOLESALE";

@@ -223,6 +223,104 @@ async function stripeWebhook(req, res) {
     }
 }
 
+/* Order Reviews */
+async function getOrderReviewSummary(req, res) {
+    try {
+        const { orderNumber } = req.params;
+        const oRes = await db.query(`
+            SELECT id, order_number as "orderNumber", created_at as "placedAt"
+            FROM orders
+            WHERE order_number = $1 OR id::text = $1
+            LIMIT 1;
+        `, [orderNumber]);
+
+        if (oRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Not Found', message: 'Order not found' });
+        }
+        const order = oRes.rows[0];
+
+        const itemsRes = await db.query(`
+            SELECT oi.id as "orderItemId", oi.product_name as "productName",
+                   oi.product_slug as "productSlug", oi.sku, oi.image_url as "image",
+                   oi.quantity,
+                   r.rating as "existingRating", r.title as "existingTitle", r.body as "existingBody"
+            FROM order_items oi
+            LEFT JOIN reviews r ON r.product_id = oi.variant_id OR (r.product_name = oi.product_name AND r.author_name LIKE '%' || $1 || '%')
+            WHERE oi.order_id = $2;
+        `, [order.orderNumber, order.id]);
+
+        return res.json({
+            orderNumber: order.orderNumber,
+            placedAt: order.placedAt,
+            items: itemsRes.rows
+        });
+    } catch (err) {
+        console.error('[getOrderReviewSummary error]:', err);
+        return res.status(500).json({ error: 'Internal Server Error', message: err.message });
+    }
+}
+
+async function submitOrderReview(req, res) {
+    try {
+        const { orderNumber, orderItemId } = req.params;
+        const { rating, title, body } = req.body || {};
+        const numRating = Math.max(1, Math.min(5, parseInt(rating, 10) || 5));
+
+        const oiRes = await db.query(`
+            SELECT oi.id, oi.order_id, oi.product_name, oi.product_slug, oi.variant_id, o.email, o.order_number
+            FROM order_items oi
+            JOIN orders o ON o.id = oi.order_id
+            WHERE (o.order_number = $1 OR o.id::text = $1) AND oi.id = $2
+            LIMIT 1;
+        `, [orderNumber, orderItemId]);
+
+        if (oiRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Not Found', message: 'Order item not found' });
+        }
+        const item = oiRes.rows[0];
+
+        let productId = item.variant_id;
+        if (!productId) {
+            const pRes = await db.query('SELECT id FROM products WHERE slug = $1 LIMIT 1', [item.product_slug]);
+            if (pRes.rows.length > 0) productId = pRes.rows[0].id;
+        }
+
+        const authorName = item.email ? item.email.split('@')[0] : `Customer (${orderNumber})`;
+
+        await db.query(`
+            INSERT INTO reviews (product_id, product_name, author_name, rating, title, body, status, created_at, updated_at, version)
+            VALUES ($1, $2, $3, $4, $5, $6, 'APPROVED', NOW(), NOW(), 0);
+        `, [productId, item.product_name, authorName, numRating, (title || '').trim() || null, (body || '').trim() || null]);
+
+        if (productId) {
+            try {
+                const statRes = await db.query(`
+                    SELECT COALESCE(AVG(rating), 5.0) as avg, COUNT(*) as cnt
+                    FROM reviews
+                    WHERE product_id = $1 AND status = 'APPROVED';
+                `, [productId]);
+                if (statRes.rows.length > 0) {
+                    await db.query(`UPDATE products SET rating_average = $1, review_count = $2 WHERE id = $3`, [
+                        parseFloat(statRes.rows[0].avg).toFixed(1),
+                        parseInt(statRes.rows[0].cnt, 10),
+                        productId
+                    ]);
+                }
+            } catch (e) {}
+        }
+
+        return res.json({
+            orderItemId: parseInt(orderItemId, 10),
+            rating: numRating,
+            title: title || null,
+            body: body || null
+        });
+    } catch (err) {
+        console.error('[submitOrderReview error]:', err);
+        return res.status(500).json({ error: 'Internal Server Error', message: err.message });
+    }
+}
+
 /* Health */
 async function health(req, res) {
     return res.json({ status: 'UP', service: 'watani-b2c-express-service', timestamp: new Date().toISOString() });
@@ -236,6 +334,8 @@ module.exports = {
     removeWishlist,
     getCurrencies,
     getSettings,
+    getOrderReviewSummary,
+    submitOrderReview,
     stripeWebhook,
     health
 };

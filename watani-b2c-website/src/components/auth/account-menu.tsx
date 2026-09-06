@@ -96,7 +96,7 @@ export function AccountMenu({open, onClose}: { open: boolean; onClose: () => voi
                                 My Profile
                             </Link>
 
-                            {user.pricingGroup === "RETAIL" && (
+                            {!isAdminRole(user.roles) && user.pricingGroup !== "ADMIN" && user.pricingGroup !== "DISTRIBUTOR" && user.pricingGroup === "RETAIL" && (
                                 <button
                                     type="button"
                                     role="menuitem"

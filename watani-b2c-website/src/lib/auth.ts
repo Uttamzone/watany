@@ -1,4 +1,5 @@
 import {apiFetch} from "@/lib/api";
+export { isAdminRole } from "@/lib/admin/permissions";
 
 /** Mirrors com.watani.b2c.domain.pricing.PricingGroup. */
 export type PricingGroup = "RETAIL" | "WHOLESALE" | "DISTRIBUTOR" | "ADMIN";

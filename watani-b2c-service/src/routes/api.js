@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { verifyToken, optionalAuth, requireAdmin } = require('../middleware/auth');
+const { authRateLimiter, reviewRateLimiter } = require('../middleware/rateLimiter');
 
 const auth = require('../controllers/authController');
 const catalogue = require('../controllers/catalogueController');
@@ -22,12 +23,12 @@ function mapRoute(methods, paths, ...handlers) {
 }
 
 /* Auth Routes */
-mapRoute('post', ['/v1/auth/login', '/auth/login'], auth.login);
-mapRoute('post', ['/v1/auth/google', '/auth/google'], auth.googleLogin);
-mapRoute('post', ['/v1/auth/register', '/auth/register'], auth.register);
+mapRoute('post', ['/v1/auth/login', '/auth/login'], authRateLimiter, auth.login);
+mapRoute('post', ['/v1/auth/google', '/auth/google'], authRateLimiter, auth.googleLogin);
+mapRoute('post', ['/v1/auth/register', '/auth/register'], authRateLimiter, auth.register);
 mapRoute('get', ['/v1/auth/me', '/auth/me'], verifyToken, auth.me);
 mapRoute('put', ['/v1/auth/me', '/auth/me'], verifyToken, auth.updateProfile);
-mapRoute('post', ['/v1/auth/upgrade-request', '/auth/upgrade-request'], verifyToken, auth.upgradeRequest);
+mapRoute('post', ['/v1/auth/upgrade-request', '/auth/upgrade-request'], verifyToken, authRateLimiter, auth.upgradeRequest);
 mapRoute('post', ['/v1/auth/refresh', '/auth/refresh'], auth.refreshToken);
 mapRoute('post', ['/v1/auth/logout', '/auth/logout'], auth.logout);
 
@@ -35,6 +36,12 @@ mapRoute('post', ['/v1/auth/logout', '/auth/logout'], auth.logout);
 mapRoute('get', ['/v1/categories', '/catalogue/categories'], catalogue.getCategories);
 mapRoute('get', ['/v1/products', '/catalogue/products'], optionalAuth, catalogue.getProducts);
 mapRoute('get', ['/v1/products/:slug', '/catalogue/products/:slug'], optionalAuth, catalogue.getProductBySlug);
+mapRoute('get', ['/v1/catalogue/products/:slug/reviews', '/catalogue/products/:slug/reviews', '/v1/products/:slug/reviews', '/products/:slug/reviews'], catalogue.getProductReviews);
+mapRoute('post', ['/v1/catalogue/products/:slug/reviews', '/catalogue/products/:slug/reviews', '/v1/products/:slug/reviews', '/products/:slug/reviews'], reviewRateLimiter, optionalAuth, catalogue.createProductReview);
+
+/* Public Order Reviews */
+mapRoute('get', ['/v1/reviews/order/:orderNumber', '/reviews/order/:orderNumber'], misc.getOrderReviewSummary);
+mapRoute('post', ['/v1/reviews/order/:orderNumber/items/:orderItemId', '/reviews/order/:orderNumber/items/:orderItemId'], reviewRateLimiter, misc.submitOrderReview);
 
 /* Cart Routes */
 mapRoute('get', ['/v1/cart', '/cart'], optionalAuth, cart.getCart);

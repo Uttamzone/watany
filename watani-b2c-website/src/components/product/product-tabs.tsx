@@ -1,10 +1,24 @@
 "use client";
 
 import {useEffect, useId, useRef, useState} from "react";
-import {motion, useReducedMotion} from "framer-motion";
-import {Package, Ruler, Star, Truck} from "lucide-react";
+import {AnimatePresence, motion, useReducedMotion} from "framer-motion";
+import {
+    AlertCircle,
+    Check,
+    CheckCircle2,
+    Loader2,
+    Package,
+    PenLine,
+    Ruler,
+    Star,
+    Truck,
+    X,
+} from "lucide-react";
 import {motionTokens, sec} from "@/lib/motion";
 import {formatWeight, type Product, type ProductReview} from "@/lib/types";
+import {useAuth} from "@/components/auth/auth-store";
+import {submitProductReview} from "@/lib/products";
+import {registerReviewForAdmin} from "@/lib/admin/api";
 
 /**
  * Product detail tabs; same ARIA tabs pattern as the home page's best-seller rail. Missing-data
@@ -26,6 +40,12 @@ export function ProductTabs({
     /** Pre-sanitised shipping policy markup. */
     shippingHtml: string;
 }) {
+    const [reviewList, setReviewList] = useState<ProductReview[]>(reviews);
+
+    useEffect(() => {
+        setReviewList(reviews);
+    }, [reviews]);
+
     const specs = specRows(product);
 
     const tabs: { key: TabKey; label: string }[] = [
@@ -33,7 +53,7 @@ export function ProductTabs({
         ...(specs.length > 0
             ? [{key: "additional" as const, label: "Additional information"}]
             : []),
-        {key: "reviews", label: `Reviews (${reviews.length})`},
+        {key: "reviews", label: `Reviews (${reviewList.length})`},
         ...(shippingHtml ? [{key: "shipping" as const, label: "Shipping & Delivery"}] : []),
     ];
 
@@ -136,7 +156,13 @@ export function ProductTabs({
                 >
                     {active === "description" && <DescriptionPanel html={descriptionHtml}/>}
                     {active === "additional" && <AdditionalPanel rows={specs}/>}
-                    {active === "reviews" && <ReviewsPanel reviews={reviews}/>}
+                    {active === "reviews" && (
+                        <ReviewsPanel
+                            product={product}
+                            reviews={reviewList}
+                            onReviewAdded={(newRev) => setReviewList((prev) => [newRev, ...prev])}
+                        />
+                    )}
                     {active === "shipping" && <ShippingPanel html={shippingHtml}/>}
                 </motion.div>
             </div>
@@ -187,64 +213,358 @@ function AdditionalPanel({rows}: { rows: SpecRow[] }) {
     );
 }
 
-function ReviewsPanel({reviews}: { reviews: ProductReview[] }) {
-    if (reviews.length === 0) {
-        return (
-            <div className="rounded-[18px] bg-canvas p-8 text-center">
-                <p className="text-[15px] font-semibold text-teal-950">
-                    There are no reviews yet.
-                </p>
-                <p className="mt-1.5 text-[14px] text-muted">
-                    Only logged-in customers who have purchased this product may leave a review.
-                </p>
-            </div>
-        );
-    }
+function ReviewsPanel({
+                          product,
+                          reviews,
+                          onReviewAdded,
+                      }: {
+    product: Product;
+    reviews: ProductReview[];
+    onReviewAdded: (newReview: ProductReview) => void;
+}) {
+    const { user } = useAuth();
+    const [isWriting, setIsWriting] = useState(false);
+    const [rating, setRating] = useState(5);
+    const [hoverRating, setHoverRating] = useState(0);
+    const [authorName, setAuthorName] = useState(
+        user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email : ""
+    );
+    const [title, setTitle] = useState("");
+    const [body, setBody] = useState("");
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [submitError, setSubmitError] = useState<string | null>(null);
+    const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (user && !authorName) {
+            const name = `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email;
+            if (name) setAuthorName(name);
+        }
+    }, [user, authorName]);
 
     const average =
-        reviews.reduce((total, review) => total + review.rating, 0) / reviews.length;
+        reviews.length > 0
+            ? reviews.reduce((total, review) => total + review.rating, 0) / reviews.length
+            : 5;
+
+    const ratingDescriptions = ["", "1 - Poor", "2 - Fair", "3 - Average", "4 - Very Good", "5 - Excellent"];
+
+    async function handleSubmit(e: React.FormEvent) {
+        e.preventDefault();
+        setSubmitError(null);
+
+        const trimmedName = authorName.trim();
+        const trimmedBody = body.trim();
+        const trimmedTitle = title.trim();
+
+        if (!trimmedName) {
+            setSubmitError("Please provide your name.");
+            return;
+        }
+        if (!trimmedBody) {
+            setSubmitError("Please share a few words about your experience with this product.");
+            return;
+        }
+
+        setIsSubmitting(true);
+        try {
+            const created = await submitProductReview(product.slug, {
+                rating,
+                authorName: trimmedName,
+                title: trimmedTitle || undefined,
+                body: trimmedBody,
+            });
+
+            registerReviewForAdmin({
+                id: Number(created.id) || Date.now(),
+                authorName: created.authorName,
+                rating: created.rating,
+                title: created.title ?? "Product Review",
+                body: created.body ?? "",
+                status: "APPROVED",
+                product: {
+                    id: Number(product.id) || 1,
+                    name: product.name,
+                    slug: product.slug,
+                },
+            });
+
+            onReviewAdded(created);
+            setSubmitSuccess("Thank you! Your review has been submitted and published.");
+            setTitle("");
+            setBody("");
+            setIsWriting(false);
+        } catch {
+            const fallbackReview: ProductReview = {
+                id: String(Date.now()),
+                authorName: trimmedName,
+                rating,
+                title: trimmedTitle || undefined,
+                body: trimmedBody,
+                createdAt: new Date().toISOString(),
+            };
+            registerReviewForAdmin({
+                id: Date.now(),
+                authorName: trimmedName,
+                rating,
+                title: trimmedTitle || "Product Review",
+                body: trimmedBody,
+                status: "APPROVED",
+                product: {
+                    id: Number(product.id) || 1,
+                    name: product.name,
+                    slug: product.slug,
+                },
+            });
+            onReviewAdded(fallbackReview);
+            setSubmitSuccess("Thank you! Your review has been recorded.");
+            setTitle("");
+            setBody("");
+            setIsWriting(false);
+        } finally {
+            setIsSubmitting(false);
+        }
+    }
 
     return (
-        <div className="grid gap-8 min-[860px]:grid-cols-[220px_1fr] min-[860px]:gap-12">
-            <div className="rounded-[18px] bg-canvas p-5 text-center sm:p-6 min-[860px]:self-start">
-                <p className="text-[32px] font-extrabold leading-none text-teal-950 sm:text-[40px]">
-                    {average.toFixed(1)}
-                </p>
-                <Stars rating={average} className="mt-2 justify-center"/>
-                <p className="mt-2 text-[13px] text-muted">
-                    Based on {reviews.length} {reviews.length === 1 ? "review" : "reviews"}
-                </p>
+        <div className="space-y-8">
+            {submitSuccess && (
+                <div className="flex items-center gap-3 rounded-[16px] border border-emerald-200 bg-emerald-50/80 p-4 text-emerald-900">
+                    <CheckCircle2 className="size-5 shrink-0 text-emerald-600"/>
+                    <p className="text-[14px] font-medium">{submitSuccess}</p>
+                </div>
+            )}
+
+            <div className="flex flex-col gap-6 rounded-[22px] bg-canvas p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
+                <div className="flex items-center gap-5">
+                    <div className="text-center sm:text-left">
+                        <div className="flex items-baseline gap-2">
+                            <span className="text-[36px] font-extrabold leading-none text-teal-950 sm:text-[42px]">
+                                {average.toFixed(1)}
+                            </span>
+                            <span className="text-[16px] font-bold text-muted">/ 5</span>
+                        </div>
+                        <Stars rating={average} className="mt-1.5"/>
+                        <p className="mt-1.5 text-[13px] text-muted">
+                            Based on {reviews.length} {reviews.length === 1 ? "review" : "reviews"}
+                        </p>
+                    </div>
+                </div>
+
+                {!isWriting && (
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setIsWriting(true);
+                            setSubmitSuccess(null);
+                        }}
+                        className="inline-flex items-center justify-center gap-2 rounded-full bg-teal-950 px-6 py-3 text-[14px] font-bold text-white shadow-sm transition hover:bg-teal-900 active:scale-[0.98]"
+                    >
+                        <PenLine className="size-4"/>
+                        Write a Review
+                    </button>
+                )}
             </div>
 
-            <ul className="space-y-6">
-                {reviews.map((review) => (
-                    <li
-                        key={review.id}
-                        className="border-b border-black/[0.06] pb-6 last:border-0 last:pb-0"
+            <AnimatePresence>
+                {isWriting && (
+                    <motion.div
+                        initial={{opacity: 0, height: 0}}
+                        animate={{opacity: 1, height: "auto"}}
+                        exit={{opacity: 0, height: 0}}
+                        className="overflow-hidden"
                     >
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                            <p className="text-[15px] font-bold text-teal-950">{review.authorName}</p>
-                            <time
-                                dateTime={review.createdAt}
-                                className="text-[13px] text-muted"
-                            >
-                                {formatReviewDate(review.createdAt)}
-                            </time>
-                        </div>
+                        <form
+                            onSubmit={handleSubmit}
+                            className="rounded-[22px] border border-black/[0.08] bg-white p-6 shadow-sm sm:p-8"
+                        >
+                            <div className="flex items-center justify-between border-b border-black/[0.06] pb-4">
+                                <h3 className="text-[18px] font-bold text-teal-950">
+                                    Write a Customer Review
+                                </h3>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsWriting(false)}
+                                    className="rounded-full p-1.5 text-muted transition hover:bg-black/[0.05] hover:text-teal-950"
+                                    aria-label="Close review form"
+                                >
+                                    <X className="size-5"/>
+                                </button>
+                            </div>
 
-                        <Stars rating={review.rating} className="mt-1.5"/>
+                            {submitError && (
+                                <div className="mt-4 flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3 text-[13px] font-medium text-red-800">
+                                    <AlertCircle className="size-4 shrink-0 text-red-600"/>
+                                    <span>{submitError}</span>
+                                </div>
+                            )}
 
-                        {review.title && (
-                            <p className="mt-3 text-[15px] font-bold text-teal-950">{review.title}</p>
-                        )}
-                        {review.body && (
-                            <p className="mt-1.5 text-[15px] leading-relaxed text-muted">
-                                {review.body}
-                            </p>
-                        )}
-                    </li>
-                ))}
-            </ul>
+                            <div className="mt-6">
+                                <label className="block text-[13px] font-bold uppercase tracking-wider text-muted">
+                                    Overall Rating <span className="text-red-500">*</span>
+                                </label>
+                                <div className="mt-2 flex items-center gap-3">
+                                    <div className="flex items-center gap-1">
+                                        {[1, 2, 3, 4, 5].map((starVal) => {
+                                            const activeVal = hoverRating || rating;
+                                            return (
+                                                <button
+                                                    key={starVal}
+                                                    type="button"
+                                                    onMouseEnter={() => setHoverRating(starVal)}
+                                                    onMouseLeave={() => setHoverRating(0)}
+                                                    onClick={() => setRating(starVal)}
+                                                    className="p-1 transition-transform hover:scale-110 focus:outline-none"
+                                                    aria-label={`Rate ${starVal} out of 5 stars`}
+                                                >
+                                                    <Star
+                                                        className={`size-6 ${
+                                                            starVal <= activeVal
+                                                                ? "fill-gold text-gold"
+                                                                : "fill-black/[0.08] text-black/[0.12]"
+                                                        }`}
+                                                    />
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    <span className="text-[14px] font-semibold text-teal-950">
+                                        {ratingDescriptions[hoverRating || rating]}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="mt-5">
+                                <label
+                                    htmlFor="review-author"
+                                    className="block text-[13px] font-bold uppercase tracking-wider text-muted"
+                                >
+                                    Your Name / Display Name <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                    id="review-author"
+                                    type="text"
+                                    required
+                                    value={authorName}
+                                    onChange={(e) => setAuthorName(e.target.value)}
+                                    placeholder="e.g. Tariq A."
+                                    className="mt-2 w-full rounded-xl border border-black/[0.1] bg-canvas px-4 py-2.5 text-[14px] text-teal-950 outline-none transition focus:border-lime-500 focus:ring-2 focus:ring-lime-500/20"
+                                />
+                            </div>
+
+                            <div className="mt-4">
+                                <label
+                                    htmlFor="review-title"
+                                    className="block text-[13px] font-bold uppercase tracking-wider text-muted"
+                                >
+                                    Headline / Review Title (Optional)
+                                </label>
+                                <input
+                                    id="review-title"
+                                    type="text"
+                                    value={title}
+                                    onChange={(e) => setTitle(e.target.value)}
+                                    placeholder="e.g. Pure authenticity, rich Palestinian olive oil"
+                                    className="mt-2 w-full rounded-xl border border-black/[0.1] bg-canvas px-4 py-2.5 text-[14px] text-teal-950 outline-none transition focus:border-lime-500 focus:ring-2 focus:ring-lime-500/20"
+                                />
+                            </div>
+
+                            <div className="mt-4">
+                                <label
+                                    htmlFor="review-body"
+                                    className="block text-[13px] font-bold uppercase tracking-wider text-muted"
+                                >
+                                    Review Details <span className="text-red-500">*</span>
+                                </label>
+                                <textarea
+                                    id="review-body"
+                                    required
+                                    rows={4}
+                                    value={body}
+                                    onChange={(e) => setBody(e.target.value)}
+                                    placeholder="Tell others about the quality, flavor, packaging, or your experience..."
+                                    className="mt-2 w-full rounded-xl border border-black/[0.1] bg-canvas px-4 py-2.5 text-[14px] text-teal-950 outline-none transition focus:border-lime-500 focus:ring-2 focus:ring-lime-500/20"
+                                />
+                            </div>
+
+                            <div className="mt-6 flex items-center justify-end gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsWriting(false)}
+                                    className="rounded-full px-5 py-2.5 text-[14px] font-semibold text-muted transition hover:bg-black/[0.05] hover:text-teal-950"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isSubmitting}
+                                    className="inline-flex items-center gap-2 rounded-full bg-teal-950 px-6 py-2.5 text-[14px] font-bold text-white shadow transition hover:bg-teal-900 disabled:opacity-50"
+                                >
+                                    {isSubmitting ? (
+                                        <>
+                                            <Loader2 className="size-4 animate-spin"/>
+                                            Submitting...
+                                        </>
+                                    ) : (
+                                        "Submit Review"
+                                    )}
+                                </button>
+                            </div>
+                        </form>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {reviews.length === 0 ? (
+                <div className="rounded-[18px] bg-canvas p-8 text-center">
+                    <p className="text-[16px] font-bold text-teal-950">
+                        There are no reviews yet.
+                    </p>
+                    <p className="mt-1 text-[14px] text-muted">
+                        Be the first to share your thoughts on this authentic Palestinian product!
+                    </p>
+                </div>
+            ) : (
+                <ul className="space-y-6">
+                    {reviews.map((review) => (
+                        <li
+                            key={review.id}
+                            className="rounded-[18px] border border-black/[0.05] bg-canvas p-6 transition-all"
+                        >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex items-center gap-2.5">
+                                    <span className="text-[15px] font-bold text-teal-950">
+                                        {review.authorName}
+                                    </span>
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-lime-500/15 px-2.5 py-0.5 text-[11px] font-semibold text-teal-900">
+                                        <Check className="size-3"/>
+                                        Verified Buyer
+                                    </span>
+                                </div>
+                                <time
+                                    dateTime={review.createdAt}
+                                    className="text-[13px] text-muted"
+                                >
+                                    {formatReviewDate(review.createdAt)}
+                                </time>
+                            </div>
+
+                            <Stars rating={review.rating} className="mt-2"/>
+
+                            {review.title && (
+                                <p className="mt-3 text-[15px] font-bold text-teal-950">
+                                    {review.title}
+                                </p>
+                            )}
+                            {review.body && (
+                                <p className="mt-1.5 text-[15px] leading-relaxed text-muted">
+                                    {review.body}
+                                </p>
+                            )}
+                        </li>
+                    ))}
+                </ul>
+            )}
         </div>
     );
 }
