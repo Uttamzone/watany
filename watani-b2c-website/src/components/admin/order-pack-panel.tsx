@@ -94,7 +94,12 @@ export function OrderPackPanel({
             .catch(() => setSavedBoxes([]));
     }, [order.orderNumber]);
 
-    if (!["PROCESSING", "PACKED"].includes(order.status)) {
+    const canPack =
+        ["PROCESSING", "PACKED"].includes(order.status) ||
+        (order.pricingGroup === "DISTRIBUTOR" &&
+            ["AWAITING_PAYMENT_VERIFICATION", "PLACED", "PENDING_PAYMENT"].includes(order.status));
+
+    if (!canPack) {
         return null;
     }
 

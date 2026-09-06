@@ -1,5 +1,40 @@
+const path = require('path');
+const fs = require('fs');
 const db = require('../db');
 const { resolvePrice } = require('../services/pricing');
+
+let catalogueMap = new Map();
+try {
+    const catPath = path.join(__dirname, '../db/catalogueData.json');
+    if (fs.existsSync(catPath)) {
+        const catData = JSON.parse(fs.readFileSync(catPath, 'utf8'));
+        for (const item of catData) {
+            if (item.slug) catalogueMap.set(item.slug.toLowerCase(), item);
+            if (item.name) catalogueMap.set(item.name.toLowerCase(), item);
+            if (item.id) catalogueMap.set(String(item.id), item);
+        }
+    }
+} catch (e) {
+    console.warn('[catalogueController] Could not load catalogueData.json:', e.message);
+}
+
+function resolveProductImage(productId, slug, name, dbImage) {
+    if (dbImage && typeof dbImage === 'string' && !dbImage.includes('placeholder') && !dbImage.includes('watany-logo.png')) {
+        return dbImage;
+    }
+    const catItem = catalogueMap.get((slug || '').toLowerCase()) || catalogueMap.get((name || '').toLowerCase()) || catalogueMap.get(String(productId));
+    if (catItem && catItem.image) return catItem.image;
+    return dbImage || '/logo/watany-logo.png';
+}
+
+function resolveProductDescription(p) {
+    let desc = p.description || p.subtitle;
+    if (!desc || desc.trim().length === 0) {
+        const catItem = catalogueMap.get((p.slug || '').toLowerCase()) || catalogueMap.get(String(p.id));
+        desc = catItem?.description || catItem?.subtitle || `${p.fullName || p.name} is an authentic Palestinian product crafted with traditional heritage and exceptional quality.`;
+    }
+    return desc;
+}
 
 async function getCategories(req, res) {
     try {
@@ -89,13 +124,15 @@ async function getProducts(req, res) {
             const defaultVariant = varRes.rows[0] || { id: p.id, sku: `SKU-${p.id}`, unit: 'unit', stockQuantity: 0, active: false };
 
             const imgRes = await db.query('SELECT url FROM product_images WHERE product_id = $1 ORDER BY display_order ASC LIMIT 1', [p.id]);
-            const image = imgRes.rows[0] ? imgRes.rows[0].url : '/logo/watany-logo.png';
+            const rawImage = imgRes.rows[0] ? imgRes.rows[0].url : null;
+            const image = resolveProductImage(p.id, p.slug, p.name, rawImage);
 
             const priceInfo = await resolvePrice(defaultVariant.id, buyerGroup, 1);
 
             const priceVal = typeof priceInfo.price === 'number' ? priceInfo.price : 25.00;
             const priceMajor = String(priceInfo.priceMajor || Math.floor(priceVal));
             const priceMinor = String(priceInfo.priceMinor || '00');
+            const description = resolveProductDescription(p);
 
             content.push({
                 id: p.id,
@@ -109,7 +146,7 @@ async function getProducts(req, res) {
                 category: p.category || 'olive-oil',
                 badge: p.badge,
                 image,
-                description: p.description,
+                description,
                 priceMajor,
                 priceMinor,
                 compareAtMajor: priceInfo.compareAtMajor,
@@ -211,7 +248,10 @@ async function getProductBySlug(req, res) {
             SELECT url FROM product_images WHERE product_id = $1 ORDER BY display_order ASC;
         `, [p.id]);
         const gallery = imgRes.rows.map(r => r.url);
-        const mainImage = gallery[0] || '/logo/watany-logo.png';
+        const dbMainImage = gallery[0] || null;
+        const mainImage = resolveProductImage(p.id, p.slug, p.name, dbMainImage);
+        const finalGallery = gallery.length > 0 ? gallery : [mainImage];
+        const description = resolveProductDescription(p);
 
         const priceInfo = await resolvePrice(defaultVariant.id, buyerGroup, 1);
 
@@ -233,9 +273,9 @@ async function getProductBySlug(req, res) {
             category: p.category,
             badge: p.badge,
             image: mainImage,
-            gallery: gallery.length > 0 ? gallery : [mainImage],
-            description: p.description,
-            longDescription: p.description,
+            gallery: finalGallery,
+            description,
+            longDescription: description,
             priceMajor: priceInfo.priceMajor,
             priceMinor: priceInfo.priceMinor,
             compareAtMajor: priceInfo.compareAtMajor,
@@ -339,7 +379,9 @@ async function getRelatedProducts(req, res) {
             const defaultVariant = varRes.rows[0] || { id: p.id, sku: `SKU-${p.id}`, unit: 'unit', stockQuantity: 0, active: false };
 
             const imgRes = await db.query('SELECT url FROM product_images WHERE product_id = $1 ORDER BY display_order ASC LIMIT 1', [p.id]);
-            const image = imgRes.rows[0] ? imgRes.rows[0].url : '/logo/watany-logo.png';
+            const rawImage = imgRes.rows[0] ? imgRes.rows[0].url : null;
+            const image = resolveProductImage(p.id, p.slug, p.name, rawImage);
+            const description = resolveProductDescription(p);
 
             const priceInfo = await resolvePrice(defaultVariant.id, buyerGroup, 1);
             const priceVal = typeof priceInfo.price === 'number' ? priceInfo.price : 25.00;
@@ -358,7 +400,7 @@ async function getRelatedProducts(req, res) {
                 category: p.category || 'olive-oil',
                 badge: p.badge,
                 image,
-                description: p.description,
+                description,
                 priceMajor,
                 priceMinor,
                 compareAtMajor: priceInfo.compareAtMajor,

@@ -52,7 +52,7 @@ export function ProductTabs({
     const specs = specRows(product);
 
     const tabs: { key: TabKey; label: string }[] = [
-        ...(descriptionHtml ? [{key: "description" as const, label: "Description"}] : []),
+        {key: "description" as const, label: "Description"},
         ...(specs.length > 0
             ? [{key: "additional" as const, label: "Additional information"}]
             : []),
@@ -60,7 +60,7 @@ export function ProductTabs({
         ...(shippingHtml ? [{key: "shipping" as const, label: "Shipping & Delivery"}] : []),
     ];
 
-    const [active, setActive] = useState<TabKey>(tabs[0]?.key || "reviews");
+    const [active, setActive] = useState<TabKey>("description");
     const reduceMotion = useReducedMotion();
     const baseId = useId();
     const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -157,7 +157,7 @@ export function ProductTabs({
                     animate={{opacity: 1, y: 0}}
                     transition={{duration: sec(motionTokens.base), ease: motionTokens.easeOut}}
                 >
-                    {active === "description" && <DescriptionPanel html={descriptionHtml}/>}
+                    {active === "description" && <DescriptionPanel html={descriptionHtml} product={product}/>}
                     {active === "additional" && <AdditionalPanel rows={specs}/>}
                     {active === "reviews" && (
                         <ReviewsPanel
@@ -178,12 +178,16 @@ export function ProductTabs({
 
 /* ------------------------------------------------------------------ */
 
-function DescriptionPanel({html}: { html: string }) {
+function DescriptionPanel({html, product}: { html: string; product?: Product }) {
+    const content = html && html.trim().length > 0
+        ? html
+        : `<p>${product?.subtitle || product?.fullName || "Authentic Palestinian product crafted with traditional care and heritage."}</p>`;
+
     return (
         <div
-            className="rich-text max-w-[76ch]"
+            className="rich-text max-w-[76ch] leading-relaxed text-teal-950"
             // Sanitised server-side by sanitizeRichText before reaching this prop.
-            dangerouslySetInnerHTML={{__html: html}}
+            dangerouslySetInnerHTML={{__html: content}}
         />
     );
 }

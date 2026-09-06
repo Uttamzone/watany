@@ -80,9 +80,18 @@ export default async function ProductDetailPage(
 
     // Sanitised here, on the server, so the client component only ever receives
     // markup that is already safe to hand to dangerouslySetInnerHTML.
-    const descriptionHtml = sanitizeRichText(
-        product.longDescription ?? (product.description ? `<p>${product.description}</p>` : null),
-    );
+    let rawDesc = product.longDescription || product.description || product.subtitle || "";
+    if (!rawDesc || rawDesc.trim().length === 0) {
+        rawDesc = `${product.fullName} is an authentic Palestinian product crafted with traditional heritage and premium quality. Sourced directly from local Palestinian producers.`;
+    }
+    if (!/<[a-zA-Z][^>]*>/.test(rawDesc)) {
+        rawDesc = `<p>${rawDesc}</p>`;
+    } else {
+        if (rawDesc.includes("<p>") && !rawDesc.endsWith("</p>")) {
+            rawDesc += "</p>";
+        }
+    }
+    const descriptionHtml = sanitizeRichText(rawDesc);
     const shippingHtml = sanitizeRichText(shippingPolicy);
 
     const categoryName =

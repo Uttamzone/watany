@@ -3,10 +3,10 @@
 import {use, useEffect, useState} from "react";
 import Link from "next/link";
 import {useRouter} from "next/navigation";
-import {ArrowLeft, ArrowRight, BadgeCheck, ClipboardList, ReceiptText, Trash2} from "lucide-react";
+import {ArrowLeft, ArrowRight, BadgeCheck, ClipboardList, ReceiptText, Trash2, RotateCcw, AlertCircle, CheckCircle2} from "lucide-react";
 import * as adminApi from "@/lib/admin/api";
 import type {OrderResponse, OrderStatus} from "@/lib/admin/types";
-import {ORDER_STATUS_TRANSITIONS} from "@/lib/admin/types";
+import {getOrderStatusTransitions} from "@/lib/admin/types";
 import {StatusBadge} from "@/components/admin/status-badge";
 import {ConfirmDialog} from "@/components/admin/confirm-dialog";
 import {ApiError} from "@/lib/api";
@@ -50,6 +50,8 @@ export default function AdminOrderDetailPage({
     const [markPaidOpen, setMarkPaidOpen] = useState(false);
     const [markPaidReference, setMarkPaidReference] = useState("");
     const [markPaidNote, setMarkPaidNote] = useState("");
+    const [markUnpaidOpen, setMarkUnpaidOpen] = useState(false);
+    const [markUnpaidNote, setMarkUnpaidNote] = useState("");
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [deleting, setDeleting] = useState(false);
 
@@ -88,12 +90,26 @@ export default function AdminOrderDetailPage({
                 note: markPaidNote.trim() || undefined,
             });
             setOrder(updated);
+            notifications.success("Marked as Paid", `Order ${orderNumber} payment verified successfully.`);
         } catch (err) {
             notifications.error("Mark as paid failed", err instanceof ApiError ? err.message : "Mark as paid failed.");
         } finally {
             setMarkPaidOpen(false);
             setMarkPaidReference("");
             setMarkPaidNote("");
+        }
+    }
+
+    async function applyMarkUnpaid() {
+        try {
+            const updated = await adminApi.markOrderUnpaid(orderNumber, markUnpaidNote.trim() || undefined);
+            setOrder(updated);
+            notifications.success("Marked as Unpaid", `Order ${orderNumber} payment status reverted to unpaid (pending).`);
+        } catch (err) {
+            notifications.error("Mark as unpaid failed", err instanceof ApiError ? err.message : "Mark as unpaid failed.");
+        } finally {
+            setMarkUnpaidOpen(false);
+            setMarkUnpaidNote("");
         }
     }
 
@@ -135,11 +151,15 @@ export default function AdminOrderDetailPage({
     // Mirrors OrderService.markPaidManually's guard - UX-only, backend is the real gate.
     const canMarkPaid =
         order.status !== "CANCELLED" &&
-        !["CAPTURED", "REFUNDED", "PARTIALLY_REFUNDED"].includes(order.paymentStatus);
+        !["CAPTURED", "REFUNDED", "PARTIALLY_REFUNDED"].includes(order.paymentStatus) &&
+        order.paymentStatus !== "PAID";
+
+    const isPaid = order.paymentStatus === "PAID" || order.paymentStatus === "CAPTURED";
+    const canMarkUnpaid = order.status !== "CANCELLED" && isPaid;
 
     // Drop bare PAID from the generic list - the "Mark as paid" card below is
     // the only route to PAID that records a payment reference/note.
-    const nextStatuses = (ORDER_STATUS_TRANSITIONS[order.status] ?? []).filter(
+    const nextStatuses = getOrderStatusTransitions(order).filter(
         (status) => !(canMarkPaid && status === "PAID"),
     );
 
@@ -156,20 +176,51 @@ export default function AdminOrderDetailPage({
             <div className="mt-2 flex flex-wrap items-center justify-between gap-4">
                 <h1 className="text-[26px] font-extrabold text-teal-950">{order.orderNumber}</h1>
                 <div className="flex flex-wrap items-center gap-2">
-          <span
-              className="inline-flex items-center rounded-full bg-navy/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-navy">
-            {CUSTOMER_CATEGORY_LABEL[order.pricingGroup] ?? order.pricingGroup}
-          </span>
+                    <span
+                        className="inline-flex items-center rounded-full bg-navy/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-navy">
+                        {CUSTOMER_CATEGORY_LABEL[order.pricingGroup] ?? order.pricingGroup}
+                    </span>
                     {order.paymentMethod !== "STRIPE" && (
                         <span
                             className="inline-flex items-center rounded-full bg-soft-control px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-teal-900">
-              {PAYMENT_METHOD_LABEL[order.paymentMethod] ?? order.paymentMethod}
-            </span>
+                            {PAYMENT_METHOD_LABEL[order.paymentMethod] ?? order.paymentMethod}
+                        </span>
+                    )}
+                    {isPaid ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-emerald-800 shadow-sm">
+                            <span className="size-2 rounded-full bg-emerald-600 animate-pulse" />
+                            PAID
+                        </span>
+                    ) : (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-amber-800 shadow-sm">
+                            <span className="size-2 rounded-full bg-amber-600" />
+                            UNPAID
+                        </span>
                     )}
                     <StatusBadge status={order.status}/>
                     <StatusBadge status={order.paymentStatus}/>
                 </div>
             </div>
+
+            {order.pricingGroup === "DISTRIBUTOR" && (
+                <div className="mt-4 flex items-start gap-3 rounded-2xl border border-sky-200 bg-sky-50/80 p-4 text-sky-950">
+                    <CheckCircle2 className="size-5 shrink-0 text-sky-600 mt-0.5" aria-hidden />
+                    <div className="text-[13px] leading-relaxed">
+                        <span className="font-bold">Distributor Account (Pay Later Terms):</span>{" "}
+                        Distributors purchase in bulk and pay later via e-transfer or cheque. This order is eligible to be processed, packed, and shipped before upfront payment is verified.
+                    </div>
+                </div>
+            )}
+
+            {order.pricingGroup !== "DISTRIBUTOR" && !isPaid && (
+                <div className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-amber-950">
+                    <AlertCircle className="size-5 shrink-0 text-amber-600 mt-0.5" aria-hidden />
+                    <div className="text-[13px] leading-relaxed">
+                        <span className="font-bold">Payment Required:</span>{" "}
+                        This is a consumer/wholesale order. Full payment must be received and marked as paid before shipping can proceed.
+                    </div>
+                </div>
+            )}
 
             {error && (
                 <p className="mt-4 rounded-xl bg-coral/10 px-4 py-3 text-[14px] font-medium text-coral">{error}</p>
@@ -312,6 +363,34 @@ export default function AdminOrderDetailPage({
                         </div>
                     )}
 
+                    {canMarkUnpaid && (
+                        <div className="rounded-2xl bg-white p-5 shadow-card border border-amber-500/20">
+                            <div className="flex items-center gap-2">
+                                <RotateCcw className="size-4 text-amber-600" aria-hidden/>
+                                <h2 className="text-[15px] font-bold text-teal-950">Mark as unpaid</h2>
+                            </div>
+                            <p className="mt-1 text-[12px] text-muted">
+                                If this order was mistakenly marked as paid, you can revert its payment status back to unpaid (pending).
+                            </p>
+                            <div className="mt-3">
+                                <input
+                                    type="text"
+                                    value={markUnpaidNote}
+                                    onChange={(e) => setMarkUnpaidNote(e.target.value)}
+                                    placeholder="Reason for reverting to unpaid (optional)"
+                                    className="h-10 w-full rounded-xl border border-black/10 px-3 text-[13px] outline-none focus:border-amber-600"
+                                />
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setMarkUnpaidOpen(true)}
+                                className="mt-3 h-10 w-full rounded-xl bg-amber-600 text-[13px] font-bold text-white transition-colors hover:bg-amber-700"
+                            >
+                                Mark as unpaid
+                            </button>
+                        </div>
+                    )}
+
                     {nextStatuses.length > 0 && (
                         <div className="rounded-2xl bg-white p-5 shadow-card">
                             <h2 className="text-[15px] font-bold text-teal-950">Update status</h2>
@@ -392,6 +471,19 @@ export default function AdminOrderDetailPage({
                 confirmLabel="Mark as paid"
                 onCancel={() => setMarkPaidOpen(false)}
                 onConfirm={applyMarkPaid}
+            />
+
+            <ConfirmDialog
+                open={markUnpaidOpen}
+                title="Mark this order as unpaid?"
+                description={
+                    `Reverts the payment status of order ${order.orderNumber} back to UNPAID (PENDING). ` +
+                    "Use this if payment verification was recorded prematurely or in error."
+                }
+                confirmLabel="Mark as unpaid"
+                danger
+                onCancel={() => setMarkUnpaidOpen(false)}
+                onConfirm={applyMarkUnpaid}
             />
 
             <ConfirmDialog

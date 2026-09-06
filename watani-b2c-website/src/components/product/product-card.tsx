@@ -40,7 +40,7 @@ export function ProductCard({product}: { product: Product }) {
           ) : null}
           <div className="grid size-full place-items-center transition-transform duration-[220ms] ease-out group-focus-within:-translate-y-1.5 group-focus-within:scale-[1.035] group-hover:-translate-y-1.5 group-hover:scale-[1.035]">
             <Image
-              src={productImageSrc(product.image)}
+              src={productImageSrc(product.image, product.slug || product.name)}
               alt={product.fullName}
               width={172}
               height={172}

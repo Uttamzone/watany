@@ -277,7 +277,7 @@ async function rejectCustomerGroup(req, res) {
 
 async function listAdminProducts(req, res) {
     try {
-        const { name = '', page = 0, size = 500 } = req.query;
+        const { name = '', page = 0, size = 500, sort = 'id', direction = 'asc' } = req.query;
         let where = [];
         let params = [];
         let pIdx = 1;
@@ -295,6 +295,14 @@ async function listAdminProducts(req, res) {
         const countRes = await db.query(`SELECT COUNT(*) FROM products p ${whereSql}`, params);
         const totalElements = parseInt(countRes.rows[0].count, 10);
 
+        let sortCol = 'p.id';
+        if (sort === 'name') sortCol = 'p.name';
+        else if (sort === 'category' || sort === 'categorySlug') sortCol = 'c.name';
+        else if (sort === 'createdAt' || sort === 'created_at') sortCol = 'p.created_at';
+        else if (sort === 'id') sortCol = 'p.id';
+
+        const sortDir = (direction && String(direction).toLowerCase() === 'desc') ? 'DESC' : 'ASC';
+
         const { rows: products } = await db.query(`
             SELECT p.id, p.slug, p.name, p.full_name as "fullName",
                    p.subtitle, p.description, p.category_id,
@@ -303,7 +311,7 @@ async function listAdminProducts(req, res) {
             FROM products p
             LEFT JOIN categories c ON p.category_id = c.id
             ${whereSql}
-            ORDER BY p.id DESC
+            ORDER BY ${sortCol} ${sortDir}
             LIMIT $${pIdx} OFFSET $${pIdx + 1};
         `, [...params, limit, offset]);
 
@@ -778,6 +786,26 @@ async function updateOrderStatus(req, res) {
         const orderNumber = req.params.orderNumber || req.params.id;
         const { status, trackingNumber, carrierName } = req.body;
 
+        // Check distributor vs retail/wholesale shipping constraint:
+        // Only distributors can have shipping processed without being paid yet.
+        if (status === 'SHIPPED') {
+            const checkRes = await db.query(
+                `SELECT pricing_group as "pricingGroup", payment_status as "paymentStatus" FROM orders WHERE order_number = $1 OR id::text = $1`,
+                [orderNumber]
+            );
+            if (checkRes.rows.length > 0) {
+                const currentOrder = checkRes.rows[0];
+                const isDistributor = currentOrder.pricingGroup === 'DISTRIBUTOR';
+                const isPaid = currentOrder.paymentStatus === 'PAID' || currentOrder.paymentStatus === 'CAPTURED';
+                if (!isDistributor && !isPaid) {
+                    return res.status(400).json({
+                        error: 'Bad Request',
+                        message: 'Payment required before shipping. Only distributor accounts have terms permitting shipment prior to payment.'
+                    });
+                }
+            }
+        }
+
         const { rows } = await db.query(`
             UPDATE orders
             SET status = COALESCE($1, status),
@@ -855,6 +883,36 @@ async function markOrderPaid(req, res) {
         const itemsRes = await db.query('SELECT * FROM order_items WHERE order_id = $1', [rows[0].id]);
         return res.json(formatOrderRow(rows[0], itemsRes.rows));
     } catch (err) {
+        return res.status(500).json({ error: 'Internal Server Error', message: err.message });
+    }
+}
+
+async function markOrderUnpaid(req, res) {
+    try {
+        const orderNumber = req.params.orderNumber || req.params.id;
+        const { note } = req.body || {};
+        const { rows } = await db.query(`
+            UPDATE orders
+            SET payment_status = 'PENDING',
+                updated_at = NOW()
+            WHERE order_number = $1 OR id::text = $1
+            RETURNING *;
+        `, [orderNumber]);
+
+        if (rows.length === 0) return res.status(404).json({ error: 'Not Found', message: 'Order not found' });
+
+        await logAudit({
+            req,
+            action: 'ORDER_MARKED_UNPAID',
+            entityType: 'ORDER',
+            entityId: orderNumber,
+            newValue: { paymentStatus: 'PENDING', note }
+        });
+
+        const itemsRes = await db.query('SELECT * FROM order_items WHERE order_id = $1', [rows[0].id]);
+        return res.json(formatOrderRow(rows[0], itemsRes.rows));
+    } catch (err) {
+        console.error('[markOrderUnpaid error]:', err);
         return res.status(500).json({ error: 'Internal Server Error', message: err.message });
     }
 }
@@ -2301,6 +2359,7 @@ module.exports = {
     getAdminOrderDetail,
     updateOrderStatus,
     markOrderPaid,
+    markOrderUnpaid,
     refundOrder,
     deleteOrder,
     getOrderBoxes,

@@ -165,7 +165,7 @@ export default function AdminCataloguePage() {
                 return (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                        src={productImageSrc(rawUrl)}
+                        src={productImageSrc(rawUrl, row.slug || row.name)}
                         alt={row.name}
                         className="size-10 rounded-lg object-cover"
                         onError={(e) => {

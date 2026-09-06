@@ -1349,6 +1349,35 @@ export function markOrderPaid(orderNumber: string, payload: MarkPaidRequest): Pr
     );
 }
 
+export function markOrderUnpaid(orderNumber: string, note?: string): Promise<OrderResponse> {
+    return fetchWithFallback(
+        async () => {
+            const updated = await apiFetch<OrderResponse>(`/api/admin/orders/${encodeURIComponent(orderNumber)}/unpaid`, {
+                method: "POST",
+                body: JSON.stringify({ note }),
+            });
+            const idx = stateOrders.findIndex(o => o.orderNumber === orderNumber);
+            if (idx !== -1) stateOrders[idx] = updated;
+            persistOrdersState();
+            return updated;
+        },
+        () => {
+            const match = stateOrders.find(o => o.orderNumber === orderNumber);
+            if (match) {
+                match.paymentStatus = "PENDING";
+                match.timeline.push({
+                    status: match.status,
+                    message: note ?? "Marked unpaid by admin",
+                    at: new Date().toISOString()
+                });
+                persistOrdersState();
+                return match;
+            }
+            return stateOrders[0];
+        }
+    );
+}
+
 export function refundOrder(orderNumber: string, payload: RefundRequest): Promise<OrderResponse> {
     return fetchWithFallback(
         async () => {

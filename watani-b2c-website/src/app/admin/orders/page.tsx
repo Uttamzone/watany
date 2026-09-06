@@ -134,8 +134,36 @@ export default function AdminOrdersPage() {
         </span>
             ),
         },
-        {key: "status", header: "Status", sortKey: "status", render: (row) => <StatusBadge status={row.status}/>},
-        {key: "payment", header: "Payment", render: (row) => <StatusBadge status={row.paymentStatus}/>},
+        {
+            key: "payment",
+            header: "Payment",
+            sortKey: "paymentStatus",
+            render: (row) => {
+                const isPaid = row.paymentStatus === "PAID" || row.paymentStatus === "CAPTURED";
+                const isRefunded = row.paymentStatus === "REFUNDED" || row.paymentStatus === "PARTIALLY_REFUNDED";
+                if (isPaid) {
+                    return (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wide text-emerald-800 border border-emerald-500/25">
+                            <span className="size-1.5 rounded-full bg-emerald-600" />
+                            PAID
+                        </span>
+                    );
+                }
+                if (isRefunded) {
+                    return (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-navy/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-navy">
+                            REFUNDED
+                        </span>
+                    );
+                }
+                return (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wide text-amber-800 border border-amber-500/25">
+                        <span className="size-1.5 rounded-full bg-amber-600 animate-pulse" />
+                        UNPAID
+                    </span>
+                );
+            },
+        },
         {
             key: "total",
             header: "Total",

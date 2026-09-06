@@ -206,7 +206,7 @@ export function productImageSrc(image: string | null | undefined, slugOrName?: s
                 ? (image as any).url
                 : undefined;
 
-    if (!raw || typeof raw !== "string" || raw.trim().length === 0 || raw.includes("placeholder")) {
+    if (!raw || typeof raw !== "string" || raw.trim().length === 0 || raw.includes("placeholder") || raw.includes("watany-logo.png")) {
         if (slugOrName) {
             const key = String(slugOrName).toLowerCase().trim();
             const found = fallbackImageBySlug.get(key);

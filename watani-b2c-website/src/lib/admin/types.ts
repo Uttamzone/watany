@@ -276,6 +276,7 @@ export type PaymentStatus =
     | "PENDING"
     | "AUTHORIZED"
     | "CAPTURED"
+    | "PAID"
     | "FAILED"
     | "REFUNDED"
     | "PARTIALLY_REFUNDED"
@@ -303,6 +304,33 @@ export const ORDER_STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
     CANCELLED: [],
     REFUNDED: [],
 };
+
+/** Resolves allowable next statuses accounting for distributor pay-later terms and retail payment enforcement. */
+export function getOrderStatusTransitions(order: { status: OrderStatus; pricingGroup?: string; paymentStatus?: string }): OrderStatus[] {
+    const isDistributor = order.pricingGroup === "DISTRIBUTOR";
+    const isPaid = order.paymentStatus === "PAID" || order.paymentStatus === "CAPTURED";
+
+    if (isDistributor) {
+        // Distributor accounts buy in bulk and pay later by e-transfer or cheque:
+        // they can advance through processing, packing, and shipping without being paid upfront.
+        if (order.status === "AWAITING_PAYMENT_VERIFICATION" || order.status === "PLACED" || order.status === "PENDING_PAYMENT") {
+            return ["PROCESSING", "CANCELLED"];
+        }
+        if (order.status === "PROCESSING") {
+            return ["PACKED", "SHIPPED", "CANCELLED", "REFUNDED"];
+        }
+        if (order.status === "PACKED") {
+            return ["SHIPPED", "CANCELLED", "REFUNDED"];
+        }
+    } else {
+        // Retail and Wholesale customers must be paid before shipping
+        if (!isPaid && order.status === "PACKED") {
+            return ["CANCELLED", "REFUNDED"];
+        }
+    }
+
+    return ORDER_STATUS_TRANSITIONS[order.status] ?? [];
+}
 
 export type AddressRequest = {
     fullName: string;

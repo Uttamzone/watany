@@ -273,14 +273,20 @@ export function ProductPurchasePanel({product}: { product: Product }) {
                 </div>
             </dl>
 
-            <div
-                className="rich-text mt-6 text-[15px] leading-relaxed text-muted"
-                dangerouslySetInnerHTML={{
-                    __html: /<[a-zA-Z][^>]*>/.test(product.description ?? "")
-                        ? sanitizeRichText(product.description)
-                        : (product.description ?? ""),
-                }}
-            />
+            {(() => {
+                const descText = product.description || product.subtitle || "";
+                if (!descText || descText.trim().length === 0) return null;
+                const isHtml = /<[a-zA-Z][^>]*>/.test(descText);
+                const safeHtml = isHtml
+                    ? sanitizeRichText(descText + (descText.includes("<p>") && !descText.endsWith("</p>") ? "</p>" : ""))
+                    : `<p>${descText}</p>`;
+                return (
+                    <div
+                        className="rich-text mt-6 border-t border-black/5 pt-4 text-[14px] leading-relaxed text-muted"
+                        dangerouslySetInnerHTML={{ __html: safeHtml }}
+                    />
+                );
+            })()}
         </div>
     );
 }

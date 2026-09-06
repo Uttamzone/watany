@@ -21,7 +21,8 @@ type FieldKey =
     | "priceWholesaleBase"
     | "priceRetail"
     | "priceWholesale"
-    | "priceDistributor";
+    | "priceDistributor"
+    | "description";
 
 /**
  * How a field renders in the card: "title" is the big product name, "chip" is a small pill
@@ -53,6 +54,7 @@ const FIELD_DEFS: FieldDef[] = [
     {key: "priceRetail", label: "Retail price (all tiers)", defaultOn: false, role: "price", variantLevel: true},
     {key: "priceWholesale", label: "Wholesale price (all tiers)", defaultOn: false, role: "price", variantLevel: true},
     {key: "priceDistributor", label: "Distributor price (all tiers)", defaultOn: false, role: "price", variantLevel: true},
+    {key: "description", label: "Description", defaultOn: true, role: "meta"},
     // Status is intentionally not offered here - excluded by default per catalogue PDF export requirements.
 ];
 
@@ -100,7 +102,7 @@ const COMPANY_PHONE = "+1 613-854-7777";
 const COMPANY_EMAIL = "Info@wataniandsons.com";
 const COMPANY_LOGO_URL = "/logo/watany-logo.png";
 
-const JSPDF_SUPPORTED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const JSPDF_SUPPORTED_TYPES = new Set(["image/jpeg", "image/png"]);
 
 function blobToDataUri(blob: Blob): Promise<string | null> {
     return new Promise((resolve) => {
@@ -263,6 +265,10 @@ export function CataloguePdfModal({open, onClose, products, title}: CataloguePdf
                 return allTiersLabel(row.variant, "WHOLESALE");
             case "priceDistributor":
                 return allTiersLabel(row.variant, "DISTRIBUTOR");
+            case "description": {
+                const raw = row.product.subtitle || row.product.description || "";
+                return raw.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim() || "-";
+            }
             default:
                 return "";
         }
