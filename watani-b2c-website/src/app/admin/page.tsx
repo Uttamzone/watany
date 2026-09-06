@@ -1,6 +1,7 @@
 "use client";
 
 import {useEffect, useState} from "react";
+import Link from "next/link";
 import {
     Check,
     Clock,
@@ -256,11 +257,12 @@ const PRIMARY_KPI_CARDS: {
     format: (v: number) => string;
     icon: typeof DollarSign;
     tone: Tone;
+    href: string;
 }[] = [
-    {key: "revenue30Days", label: "Revenue (30 days)", format: money, icon: DollarSign, tone: "lime"},
-    {key: "ordersTotal", label: "Orders total", format: String, icon: ShoppingCart, tone: "teal"},
-    {key: "ordersAwaitingFulfilment", label: "Awaiting fulfilment", format: String, icon: Clock, tone: "navy"},
-    {key: "averageOrderValue", label: "Average order value", format: money, icon: Receipt, tone: "purple"},
+    {key: "revenue30Days", label: "Revenue (30 days)", format: money, icon: DollarSign, tone: "lime", href: "/admin/orders"},
+    {key: "ordersTotal", label: "Orders total", format: String, icon: ShoppingCart, tone: "teal", href: "/admin/orders"},
+    {key: "ordersAwaitingFulfilment", label: "Awaiting fulfilment", format: String, icon: Clock, tone: "navy", href: "/admin/orders"},
+    {key: "averageOrderValue", label: "Average order value", format: money, icon: Receipt, tone: "purple", href: "/admin/orders"},
 ];
 
 /** Metrics that represent something needing staff attention - get an alert tone once nonzero. */
@@ -268,10 +270,11 @@ const ATTENTION_KPI_CARDS: {
     key: keyof DashboardKpis;
     label: string;
     icon: typeof PackageX;
+    href: string;
 }[] = [
-    {key: "lowStockCount", label: "Low stock items", icon: PackageX},
-    {key: "pendingApprovals", label: "Pending approvals", icon: UserCheck},
-    {key: "pendingReviews", label: "Pending reviews", icon: MessageSquareWarning},
+    {key: "lowStockCount", label: "Low stock items", icon: PackageX, href: "/admin/stock?filter=low-stock"},
+    {key: "pendingApprovals", label: "Pending approvals", icon: UserCheck, href: "/admin/customers?tab=PENDING"},
+    {key: "pendingReviews", label: "Pending reviews", icon: MessageSquareWarning, href: "/admin/reviews"},
 ];
 
 type RangeKey = "week" | "month" | "3month" | "year";
@@ -415,6 +418,7 @@ export default function AdminDashboardPage() {
                         icon={card.icon}
                         tone={card.tone}
                         loading={loading}
+                        href={card.href}
                     />
                 ))}
             </div>
@@ -431,6 +435,7 @@ export default function AdminDashboardPage() {
                             icon={card.icon}
                             loading={loading}
                             needsAttention={needsAttention}
+                            href={card.href}
                         />
                     );
                 })}
@@ -549,12 +554,14 @@ function DashboardMetricCard({
                                  icon: Icon,
                                  tone,
                                  loading,
+                                 href,
                              }: {
     label: string;
     value: string;
     icon: typeof DollarSign;
     tone: Tone;
     loading: boolean;
+    href: string;
 }) {
     const tones: Record<Tone, { bg: string; fg: string }> = {
         teal: {bg: "#f0f5e9", fg: "#4d7f1e"},
@@ -566,32 +573,51 @@ function DashboardMetricCard({
     };
     const tint = tones[tone];
     return (
-        <article className="dashboard-metric-card">
+        <Link
+            href={href}
+            className="dashboard-metric-card group block cursor-pointer transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
+            title={`Go to ${label}`}
+        >
             <div className="dashboard-card-topline">
-                <p>{label}</p>
+                <p className="group-hover:text-teal-900 transition-colors">{label}</p>
                 <span style={{backgroundColor: tint.bg, color: tint.fg}}><Icon aria-hidden/></span>
             </div>
             {loading ? <div className="dashboard-value-skeleton" aria-hidden/> :
                 <p className="dashboard-value">{value}</p>}
-            <div className="dashboard-card-meta"><span
-                className="dashboard-live-pill">Live</span><span>from store data</span></div>
-        </article>
+            <div className="dashboard-card-meta">
+                <span className="dashboard-live-pill">Live</span>
+                <span>from store data</span>
+                <span className="ml-auto text-[11px] font-semibold text-teal-800 opacity-0 transition-opacity group-hover:opacity-100 flex items-center gap-0.5">
+                    View &rarr;
+                </span>
+            </div>
+        </Link>
     );
 }
 
 function AttentionCard({
-                           label, value, icon: Icon, loading, needsAttention,
+                           label,
+                           value,
+                           icon: Icon,
+                           loading,
+                           needsAttention,
+                           href,
                        }: {
     label: string;
     value: string;
     icon: typeof PackageX;
     loading: boolean;
-    needsAttention: boolean
+    needsAttention: boolean;
+    href: string;
 }) {
     return (
-        <article className={`dashboard-attention-card ${needsAttention ? "is-alert" : ""}`}>
+        <Link
+            href={href}
+            className={`dashboard-attention-card group block cursor-pointer transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 ${needsAttention ? "is-alert" : ""}`}
+            title={`Go to ${label}`}
+        >
             <div className="dashboard-card-topline">
-                <p>{label}</p>
+                <p className="group-hover:text-teal-900 transition-colors">{label}</p>
                 <span><Icon aria-hidden/></span>
             </div>
             {loading ? <div className="dashboard-value-skeleton" aria-hidden/> :
@@ -599,7 +625,10 @@ function AttentionCard({
             <div className="dashboard-attention-status">
                 <span><Check aria-hidden/></span>
                 <p>{needsAttention ? "Needs your attention." : `All good! No ${label.toLowerCase()}.`}</p>
+                <span className="ml-auto text-[11px] font-semibold text-teal-800 opacity-0 transition-opacity group-hover:opacity-100 flex items-center gap-0.5">
+                    View &rarr;
+                </span>
             </div>
-        </article>
+        </Link>
     );
 }

@@ -1,7 +1,8 @@
 "use client";
 
-import {useEffect, useMemo, useState} from "react";
+import {Suspense, useEffect, useMemo, useState} from "react";
 import Link from "next/link";
+import {useSearchParams} from "next/navigation";
 import {Check, ChevronLeft, ChevronRight, Pencil, Plus, Search, X} from "lucide-react";
 import * as adminApi from "@/lib/admin/api";
 import type {AdminProductResponse, AdminVariantResponse} from "@/lib/admin/types";
@@ -36,12 +37,18 @@ function statusOf(variant: AdminVariantResponse): Exclude<StockFilter, "all"> {
     return "in-stock";
 }
 
-export default function AdminStockPage() {
+function AdminStockContent() {
+    const searchParams = useSearchParams();
+    const filterParam = searchParams.get("filter") as StockFilter | null;
     const [rows, setRows] = useState<StockRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [query, setQuery] = useState("");
-    const [filter, setFilter] = useState<StockFilter>("all");
+    const [filter, setFilter] = useState<StockFilter>(
+        filterParam && ["all", "in-stock", "low-stock", "out-of-stock"].includes(filterParam)
+            ? filterParam
+            : "all"
+    );
     const [page, setPage] = useState(0);
     const [editingSku, setEditingSku] = useState<string | null>(null);
     const [editValue, setEditValue] = useState("");
@@ -69,6 +76,14 @@ export default function AdminStockPage() {
             .finally(() => setLoading(false));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    useEffect(() => {
+        const nextFilter = searchParams.get("filter") as StockFilter | null;
+        if (nextFilter && ["all", "in-stock", "low-stock", "out-of-stock"].includes(nextFilter)) {
+            setFilter(nextFilter);
+            setPage(0);
+        }
+    }, [searchParams]);
 
     const counts = useMemo(() => {
         const result: Record<StockFilter, number> = {
@@ -714,5 +729,13 @@ function StatusChip({status}: { status: Exclude<StockFilter, "all"> }) {
       <span className={`size-1.5 rounded-full ${config.dot}`} aria-hidden/>
             {config.label}
     </span>
+    );
+}
+
+export default function AdminStockPage() {
+    return (
+        <Suspense fallback={<div className="p-8 text-muted">Loading stock...</div>}>
+            <AdminStockContent />
+        </Suspense>
     );
 }

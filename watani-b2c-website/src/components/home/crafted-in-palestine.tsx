@@ -21,6 +21,8 @@ type Feature = {
     title: string;
     copy: string;
     image: string;
+    href: string;
+    cta: string;
     /** Desktop-only span; the first frame is the lead image. */
     span?: string;
 };
@@ -30,17 +32,23 @@ const features: Feature[] = [
         title: "Made by Palestinian artisans",
         copy: "Traditional ceramic work shaped and painted by skilled craftspeople.",
         image: "/images/supply/handmade-artisan.png",
+        href: "/categories?category=ceramics",
+        cta: "Explore artisan craft",
         span: "lg:col-span-2",
     },
     {
         title: "Hebron ceramics",
         copy: "Functional art for kitchens, tables and meaningful gifts.",
         image: "/art/ceramics.jpeg",
+        href: "/categories?category=ceramics",
+        cta: "Explore ceramics",
     },
     {
         title: "Artistic home pieces",
         copy: "Tatreez-inspired cushions, table textiles, bags and accessories.",
         image: "/images/supply/heritage-textiles.png",
+        href: "/categories",
+        cta: "Explore collection",
     },
 ];
 
@@ -140,7 +148,10 @@ export function CraftedInPalestine() {
                                 feature.span ?? "",
                             ].join(" ")}
                         >
-                            <div className="group relative flex flex-col h-full overflow-hidden rounded-[22px] border border-teal-950/8 bg-surface shadow-card origin-bottom transition-all duration-300 ease-out hover:scale-[1.03] hover:z-20 hover:shadow-card-hover cursor-pointer">
+                            <Link
+                                href={feature.href}
+                                className="group relative flex flex-col h-full overflow-hidden rounded-[22px] border border-teal-950/8 bg-surface shadow-card origin-bottom transition-all duration-300 ease-out hover:scale-[1.03] hover:z-20 hover:shadow-card-hover cursor-pointer"
+                            >
                                 <div className="relative h-[180px] sm:h-[220px] w-full overflow-hidden bg-[#edf3ef]">
                                     <Image
                                         src={feature.image}
@@ -159,8 +170,12 @@ export function CraftedInPalestine() {
                                     <p className="mt-2 text-[13.5px] leading-relaxed text-muted">
                                         {feature.copy}
                                     </p>
+                                    <span className="mt-auto inline-flex items-center gap-1.5 pt-4 text-[13px] font-bold text-teal-900 group-hover:text-teal-950">
+                                        {feature.cta}
+                                        <span aria-hidden className="transition-transform duration-200 ease-out group-hover:translate-x-1">&rarr;</span>
+                                    </span>
                                 </div>
-                            </div>
+                            </Link>
                         </motion.li>
                     );
                 })}

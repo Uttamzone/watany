@@ -1,6 +1,7 @@
 "use client";
 
-import {useEffect, useState} from "react";
+import {Suspense, useEffect, useState} from "react";
+import {useSearchParams} from "next/navigation";
 import {
     AlertTriangle,
     Ban,
@@ -57,11 +58,17 @@ const APPROVAL_STATUS_LABELS: Record<ApprovalStatus, string> = {
 
 type CustomerFilterTab = "ALL" | "PENDING" | "WHOLESALE" | "DISTRIBUTOR" | "RETAIL";
 
-export default function AdminCustomersPage() {
+function AdminCustomersContent() {
     const notifications = useNotifications();
+    const searchParams = useSearchParams();
+    const paramTab = searchParams.get("tab") as CustomerFilterTab | null;
     const [email, setEmail] = useState("");
     const [appliedEmail, setAppliedEmail] = useState("");
-    const [tab, setTab] = useState<CustomerFilterTab>("ALL");
+    const [tab, setTab] = useState<CustomerFilterTab>(
+        paramTab && ["ALL", "PENDING", "WHOLESALE", "DISTRIBUTOR", "RETAIL"].includes(paramTab)
+            ? paramTab
+            : "ALL"
+    );
     const [page, setPage] = useState(0);
     const [sortKey, setSortKey] = useState<CustomerSortField>("firstName");
     const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
@@ -106,6 +113,14 @@ export default function AdminCustomersPage() {
         reload();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [appliedEmail, tab, page, sortKey, sortDirection]);
+
+    useEffect(() => {
+        const nextTab = searchParams.get("tab") as CustomerFilterTab | null;
+        if (nextTab && ["ALL", "PENDING", "WHOLESALE", "DISTRIBUTOR", "RETAIL"].includes(nextTab)) {
+            setTab(nextTab);
+            setPage(0);
+        }
+    }, [searchParams]);
 
     function handleTabChange(nextTab: CustomerFilterTab) {
         setTab(nextTab);
@@ -934,5 +949,13 @@ function CustomerDetailsModal({
                 </div>
             </div>
         </div>
+    );
+}
+
+export default function AdminCustomersPage() {
+    return (
+        <Suspense fallback={<div className="p-8 text-muted">Loading customers...</div>}>
+            <AdminCustomersContent />
+        </Suspense>
     );
 }

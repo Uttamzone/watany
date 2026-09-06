@@ -58,11 +58,29 @@
  * dark preference - an inverted palette would break the warm-canvas/teal
  * composition the design calls for.
  */
+/*
+ * Prevent accidental text insertion caret / typing indicator on non-editable elements.
+ * Typing carets (|) should only appear inside real editable inputs, textareas, or rich-text editors.
+ */
+*,
+*::before,
+*::after {
+    caret-color: transparent;
+}
+
+input,
+textarea,
+[contenteditable="true"],
+[contenteditable="true"] * {
+    caret-color: auto;
+}
+
 body {
     background: var(--color-canvas);
     color: var(--color-text);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+    cursor: default;
 }
 
 /*
