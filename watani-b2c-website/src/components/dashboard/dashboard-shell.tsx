@@ -201,16 +201,16 @@ export function DashboardShell({children}: { children: React.ReactNode }) {
     const sidebar = renderSidebar(false);
 
     return (
-        <div className="flex h-screen">
+        <div className="flex h-screen print:h-auto print:block">
             {/* Persistent sidebar from lg up; below that it becomes the drawer. */}
             <aside
-                className="hidden h-full w-64 shrink-0 flex-col overflow-y-auto border-r border-black/5 bg-white lg:flex">
+                className="hidden h-full w-64 shrink-0 flex-col overflow-y-auto border-r border-black/5 bg-white lg:flex print:hidden">
                 {sidebar}
             </aside>
 
             <AnimatePresence>
                 {navOpen && (
-                    <div className="fixed inset-0 z-50 lg:hidden">
+                    <div className="fixed inset-0 z-50 lg:hidden print:hidden">
                         <motion.div
                             initial={{opacity: 0}}
                             animate={{opacity: 1}}
@@ -235,9 +235,9 @@ export function DashboardShell({children}: { children: React.ReactNode }) {
                 )}
             </AnimatePresence>
 
-            <div className="flex h-full min-w-0 flex-1 flex-col">
+            <div className="flex h-full min-w-0 flex-1 flex-col print:h-auto print:block">
                 {/* Mobile top bar - the drawer's only trigger. */}
-                <div className="flex h-14 shrink-0 items-center gap-3 border-b border-black/5 bg-white px-4 lg:hidden">
+                <div className="flex h-14 shrink-0 items-center gap-3 border-b border-black/5 bg-white px-4 lg:hidden print:hidden">
                     <button
                         type="button"
                         onClick={() => setNavOpen(true)}
@@ -261,8 +261,8 @@ export function DashboardShell({children}: { children: React.ReactNode }) {
                     </Link>
                 </div>
 
-                <main className="min-w-0 flex-1 overflow-y-auto bg-canvas p-4 sm:p-6 lg:p-8">
-                    <div className="mx-auto max-w-6xl">{children}</div>
+                <main className="min-w-0 flex-1 overflow-y-auto bg-canvas p-4 sm:p-6 lg:p-8 print:p-0 print:bg-white print:overflow-visible print:m-0">
+                    <div className="mx-auto max-w-6xl print:max-w-none print:w-full">{children}</div>
                 </main>
             </div>
         </div>

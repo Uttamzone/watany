@@ -3,7 +3,7 @@
 import {use, useEffect, useState} from "react";
 import Link from "next/link";
 import {useRouter} from "next/navigation";
-import {ArrowLeft, ArrowRight, BadgeCheck, ClipboardList, ReceiptText, Trash2, RotateCcw, AlertCircle, CheckCircle2, Box, Truck, ExternalLink} from "lucide-react";
+import {ArrowLeft, ArrowRight, BadgeCheck, ClipboardList, ReceiptText, Trash2, RotateCcw, AlertCircle, CheckCircle2, Box, Truck, ExternalLink, Printer, FileText} from "lucide-react";
 import * as adminApi from "@/lib/admin/api";
 import type {OrderResponse, OrderStatus} from "@/lib/admin/types";
 import {getOrderStatusTransitions} from "@/lib/admin/types";
@@ -196,7 +196,16 @@ export default function AdminOrderDetailPage({
             </Link>
 
             <div className="mt-2 flex flex-wrap items-center justify-between gap-4">
-                <h1 className="text-[26px] font-extrabold text-teal-950">{order.orderNumber}</h1>
+                <div className="flex flex-wrap items-center gap-3">
+                    <h1 className="text-[26px] font-extrabold text-teal-950">{order.orderNumber}</h1>
+                    <Link
+                        href={`/admin/orders/${order.orderNumber}/shipping-label`}
+                        target="_blank"
+                        className="inline-flex items-center gap-1.5 rounded-full border border-teal-950/20 bg-white px-3 py-1 text-[12px] font-bold text-teal-950 shadow-xs hover:bg-soft-control transition-colors"
+                    >
+                        <Printer className="size-3.5" /> Shipping Labels &amp; BOL
+                    </Link>
+                </div>
                 <div className="flex flex-wrap items-center gap-2">
                     <span
                         className="inline-flex items-center rounded-full bg-navy/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-navy">
@@ -396,7 +405,16 @@ export default function AdminOrderDetailPage({
 
                             {order.trackingNumber ? (
                                 <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 mt-2">
-                                    <span className="text-[11px] font-extrabold text-emerald-900 uppercase tracking-wide">Tracking Number</span>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[11px] font-extrabold text-emerald-900 uppercase tracking-wide">Tracking Number</span>
+                                        <Link
+                                            href={`/admin/orders/${order.orderNumber}/shipping-label`}
+                                            target="_blank"
+                                            className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-900 hover:underline"
+                                        >
+                                            <Printer className="size-3" /> Labels
+                                        </Link>
+                                    </div>
                                     <p className="text-[14px] font-mono font-bold text-emerald-950 mt-0.5">{order.trackingNumber}</p>
                                     {order.trackingUrl && (
                                         <a
@@ -408,6 +426,22 @@ export default function AdminOrderDetailPage({
                                             Track Package Online <ExternalLink className="size-3" />
                                         </a>
                                     )}
+                                    <div className="mt-2.5 flex gap-2 pt-2 border-t border-emerald-200/60">
+                                        <Link
+                                            href={`/admin/orders/${order.orderNumber}/shipping-label?type=${(order.shippingMethod?.toLowerCase().includes("pallet") || order.shippingTotal >= 140) ? "PALLET" : "PARCEL"}`}
+                                            target="_blank"
+                                            className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg bg-teal-950 py-1.5 text-[11px] font-bold text-white hover:bg-teal-900 transition-colors shadow-xs"
+                                        >
+                                            <Printer className="size-3" /> Print Label
+                                        </Link>
+                                        <Link
+                                            href={`/admin/orders/${order.orderNumber}/shipping-label?type=BOL`}
+                                            target="_blank"
+                                            className="inline-flex items-center justify-center gap-1 rounded-lg border border-black/15 bg-white px-2.5 py-1.5 text-[11px] font-bold text-teal-950 hover:bg-soft-control transition-colors shadow-xs"
+                                        >
+                                            <FileText className="size-3 text-muted" /> BOL
+                                        </Link>
+                                    </div>
                                 </div>
                             ) : (
                                 <div className="flex flex-col gap-2 pt-1 border-t border-black/5">

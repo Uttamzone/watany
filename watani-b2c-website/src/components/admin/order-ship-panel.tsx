@@ -1,12 +1,13 @@
 "use client";
 
 import {useState, useEffect} from "react";
-import {Check, Copy, ExternalLink, PackageCheck, Pencil, Trash2, Truck} from "lucide-react";
+import {Check, Copy, ExternalLink, FileText, PackageCheck, Pencil, Printer, Trash2, Truck} from "lucide-react";
 import * as adminApi from "@/lib/admin/api";
 import type {AdminOrderDetail, OrderResponse, ShippingRateOption} from "@/lib/admin/types";
 import {ApiError} from "@/lib/api";
 import {useNotifications} from "@/components/notifications/notification-store";
 import {ConfirmDialog} from "@/components/admin/confirm-dialog";
+import {ShippingLabelDialog} from "@/components/admin/shipping-label-dialog";
 
 function money(value: number, currency: string) {
     return new Intl.NumberFormat("en-CA", {style: "currency", currency}).format(value);
@@ -61,6 +62,19 @@ export function OrderShipPanel({
     const [customTrackingUrl, setCustomTrackingUrl] = useState<string>(order.trackingUrl || "");
     const [isEditingTracking, setIsEditingTracking] = useState(false);
     const [copied, setCopied] = useState(false);
+
+    // Shipping Label & BOL dialog state
+    const [labelDialogOpen, setLabelDialogOpen] = useState(false);
+    const [labelDocType, setLabelDocType] = useState<"PARCEL" | "PALLET" | "BOL">("PARCEL");
+
+    const isPalletShipment =
+        order.shippingMethod?.toLowerCase().includes("pallet") ||
+        order.shippingMethod?.toLowerCase().includes("skid") ||
+        order.carrierName?.toLowerCase().includes("day") ||
+        order.carrierName?.toLowerCase().includes("ross") ||
+        order.carrierName?.toLowerCase().includes("ltl") ||
+        order.pricingGroup === "DISTRIBUTOR" ||
+        order.shippingTotal >= 140;
 
     useEffect(() => {
         setTrackingNumber(order.trackingNumber || "");
@@ -281,6 +295,50 @@ export function OrderShipPanel({
                             <Trash2 className="size-4" aria-hidden/>
                         </button>
                     </div>
+
+                    {/* Official Shipping Documents / Printable Labels Card */}
+                    <div className="mt-4 rounded-xl border border-teal-950/15 bg-teal-50/50 p-3.5">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <Printer className="size-4 text-teal-950" />
+                                <span className="text-[12px] font-extrabold text-teal-950 uppercase tracking-wide">
+                                    Shipping Documents &amp; Labels
+                                </span>
+                            </div>
+                            <a
+                                href={`/admin/orders/${order.orderNumber}/shipping-label`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[11px] font-bold text-teal-700 hover:text-teal-950 inline-flex items-center gap-1"
+                            >
+                                Open in new tab <ExternalLink className="size-3" />
+                            </a>
+                        </div>
+                        <div className="mt-2.5 flex flex-wrap gap-2">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setLabelDocType(isPalletShipment ? "PALLET" : "PARCEL");
+                                    setLabelDialogOpen(true);
+                                }}
+                                className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-teal-950 px-3 py-2 text-[12px] font-bold text-white shadow-xs hover:bg-teal-900 transition-colors"
+                            >
+                                <Printer className="size-3.5" />
+                                {isPalletShipment ? "Print Pallet Placards" : "Print Shipping Label (4×6)"}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setLabelDocType("BOL");
+                                    setLabelDialogOpen(true);
+                                }}
+                                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-black/15 bg-white px-3.5 py-2 text-[12px] font-bold text-teal-950 shadow-xs hover:bg-soft-control transition-colors"
+                            >
+                                <FileText className="size-3.5 text-muted" />
+                                Bill of Lading (BOL)
+                            </button>
+                        </div>
+                    </div>
                 </div>
             ) : (
                 /* Tracking Entry / Edit Form */
@@ -425,6 +483,13 @@ export function OrderShipPanel({
                 danger
                 onCancel={() => setCancelOpen(false)}
                 onConfirm={cancelShipment}
+            />
+
+            <ShippingLabelDialog
+                open={labelDialogOpen}
+                order={order}
+                defaultDocType={labelDocType}
+                onClose={() => setLabelDialogOpen(false)}
             />
         </div>
     );
