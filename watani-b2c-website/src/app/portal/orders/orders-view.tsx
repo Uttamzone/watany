@@ -21,16 +21,52 @@ export function OrdersView() {
     const [error, setError] = useState<string | null>(null);
     const [payingOrderNumber, setPayingOrderNumber] = useState<string | null>(null);
 
-    useEffect(() => {
+    function loadOrders(silent = false) {
+        if (!silent) setLoading(true);
         portalApi
             .listMyOrders()
             .then((data) => {
-                setOrders(Array.isArray(data) ? data : []);
+                const seen = new Set<string>();
+                const deduplicated = (Array.isArray(data) ? data : []).filter(o => {
+                    const key = (o.orderNumber || String(o.id || "")).trim().toUpperCase();
+                    if (!key || seen.has(key)) return false;
+                    seen.add(key);
+                    return true;
+                });
+                setOrders(deduplicated);
             })
             .catch(() => {
-                setOrders([]);
+                if (!silent) setOrders([]);
             })
-            .finally(() => setLoading(false));
+            .finally(() => {
+                if (!silent) setLoading(false);
+            });
+    }
+
+    useEffect(() => {
+        loadOrders();
+
+        function handleRefresh() {
+            if (document.visibilityState === "visible") {
+                loadOrders(true);
+            }
+        }
+
+        function handleStorage(e: StorageEvent) {
+            if (e.key === "watani.adminOrders.v1" || e.key === "watani_user_orders") {
+                loadOrders(true);
+            }
+        }
+
+        document.addEventListener("visibilitychange", handleRefresh);
+        window.addEventListener("focus", handleRefresh);
+        window.addEventListener("storage", handleStorage);
+
+        return () => {
+            document.removeEventListener("visibilitychange", handleRefresh);
+            window.removeEventListener("focus", handleRefresh);
+            window.removeEventListener("storage", handleStorage);
+        };
     }, []);
 
     async function handlePayNow(e: React.MouseEvent, orderNumber: string) {
@@ -86,7 +122,7 @@ export function OrdersView() {
                         const isPending = order.status === "PENDING_PAYMENT" || order.paymentStatus === "PENDING";
                         return (
                             <Link
-                                key={order.id}
+                                key={order.orderNumber || order.id}
                                 href={`/portal/orders/${order.orderNumber}`}
                                 className="flex flex-col gap-3 rounded-2xl bg-white p-5 shadow-card transition-colors hover:bg-soft-control"
                             >

@@ -36,15 +36,43 @@ export default function PortalOrderDetailPage({
     const [showCancelConfirm, setShowCancelConfirm] = useState(false);
     const [completingPayment, setCompletingPayment] = useState(false);
 
-    useEffect(() => {
+    function loadOrder(silent = false) {
         portalApi
             .getMyOrder(orderNumber)
             .then(setOrder)
             .catch((err) => {
-                const message = err instanceof ApiError ? err.message : "Failed to load order.";
-                setError(message);
-                notifications.error("Failed to load order", message);
+                if (!silent) {
+                    const message = err instanceof ApiError ? err.message : "Failed to load order.";
+                    setError(message);
+                    notifications.error("Failed to load order", message);
+                }
             });
+    }
+
+    useEffect(() => {
+        loadOrder();
+
+        function handleRefresh() {
+            if (document.visibilityState === "visible") {
+                loadOrder(true);
+            }
+        }
+
+        function handleStorage(e: StorageEvent) {
+            if (e.key === "watani.adminOrders.v1" || e.key === "watani_user_orders") {
+                loadOrder(true);
+            }
+        }
+
+        document.addEventListener("visibilitychange", handleRefresh);
+        window.addEventListener("focus", handleRefresh);
+        window.addEventListener("storage", handleStorage);
+
+        return () => {
+            document.removeEventListener("visibilitychange", handleRefresh);
+            window.removeEventListener("focus", handleRefresh);
+            window.removeEventListener("storage", handleStorage);
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [orderNumber]);
 

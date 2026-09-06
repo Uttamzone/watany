@@ -529,9 +529,13 @@ function syncOrdersFromStorage() {
         if (rawUser) {
             const userOrders = JSON.parse(rawUser) as any[];
             if (Array.isArray(userOrders)) {
+                const existingOrderNums = new Set(stateOrders.map(o => o.orderNumber));
                 for (const uo of userOrders) {
                     if (uo && uo.orderNumber && !deletedNumbers.has(uo.orderNumber)) {
-                        registerOrderForAdmin(uo);
+                        if (!existingOrderNums.has(uo.orderNumber)) {
+                            registerOrderForAdmin(uo);
+                            existingOrderNums.add(uo.orderNumber);
+                        }
                     }
                 }
             }
@@ -633,35 +637,43 @@ if (typeof window !== "undefined") {
 
 export function registerOrderForAdmin(order: any): void {
     if (!order || !order.orderNumber) return;
+    const existing = stateOrders.find(o => o.orderNumber === order.orderNumber);
+    const status = (existing && existing.status !== "PENDING_PAYMENT" && existing.status !== "AWAITING_PAYMENT_VERIFICATION")
+        ? existing.status
+        : (order.status || "PROCESSING");
+    const paymentStatus = (existing && (existing.paymentStatus === "PAID" || existing.paymentStatus === "CAPTURED"))
+        ? existing.paymentStatus
+        : (order.paymentStatus || (status === "PAID" ? "PAID" : "CAPTURED"));
+
     const formattedOrder: OrderResponse = {
-        id: order.id || Date.now(),
+        id: existing?.id || order.id || Date.now(),
         orderNumber: order.orderNumber,
-        email: order.email || "customer@watani.ca",
-        status: order.status || "PROCESSING",
-        paymentStatus: order.paymentStatus || "CAPTURED",
-        paymentMethod: order.paymentMethod || "STRIPE",
-        pricingGroup: order.pricingGroup || "RETAIL",
-        subtotal: order.subtotal || order.grandTotal || 0,
-        discountTotal: order.discountTotal || 0,
-        shippingTotal: order.shippingTotal || 0,
-        taxTotal: order.taxTotal || 0,
-        grandTotal: order.grandTotal || 0,
-        refundedTotal: order.refundedTotal || 0,
-        currency: order.currency || "CAD",
-        couponCode: order.couponCode || null,
-        carrierName: order.carrierName || "Watani Express Logistics",
-        shippingMethod: order.shippingMethod || "Standard Delivery",
-        trackingNumber: order.trackingNumber || null,
-        trackingUrl: order.trackingUrl || null,
+        email: order.email || existing?.email || "customer@watani.ca",
+        status,
+        paymentStatus,
+        paymentMethod: order.paymentMethod || order.paymentProvider || existing?.paymentMethod || "STRIPE",
+        pricingGroup: order.pricingGroup || existing?.pricingGroup || "RETAIL",
+        subtotal: order.subtotal || order.grandTotal || existing?.subtotal || 0,
+        discountTotal: order.discountTotal || existing?.discountTotal || 0,
+        shippingTotal: order.shippingTotal || existing?.shippingTotal || 0,
+        taxTotal: order.taxTotal || existing?.taxTotal || 0,
+        grandTotal: order.grandTotal || existing?.grandTotal || 0,
+        refundedTotal: order.refundedTotal || existing?.refundedTotal || 0,
+        currency: order.currency || existing?.currency || "CAD",
+        couponCode: order.couponCode || existing?.couponCode || null,
+        carrierName: order.carrierName || existing?.carrierName || "Watani Express Logistics",
+        shippingMethod: order.shippingMethod || existing?.shippingMethod || "Standard Delivery",
+        trackingNumber: order.trackingNumber || existing?.trackingNumber || null,
+        trackingUrl: order.trackingUrl || existing?.trackingUrl || null,
         labelUrl: null,
-        shippingAddress: order.shippingAddress || null,
-        items: order.items || [],
-        timeline: order.timeline || [
+        shippingAddress: order.shippingAddress || existing?.shippingAddress || null,
+        items: (order.items && order.items.length > 0) ? order.items : (existing?.items || []),
+        timeline: existing?.timeline || order.timeline || [
             { status: "PLACED", message: "Order placed by customer", at: new Date().toISOString() },
             { status: "PROCESSING", message: "Preparing for fulfillment", at: new Date().toISOString() }
         ],
-        placedAt: order.placedAt || new Date().toISOString(),
-        reviewToken: order.reviewToken || null
+        placedAt: order.placedAt || existing?.placedAt || new Date().toISOString(),
+        reviewToken: order.reviewToken || existing?.reviewToken || null
     };
 
     stateOrders = [formattedOrder, ...stateOrders.filter(o => o.orderNumber !== formattedOrder.orderNumber)];
@@ -673,15 +685,43 @@ export function persistOrdersState(): void {
     if (typeof window !== "undefined") {
         try {
             const deletedNumbers = getDeletedOrderNumbers();
-            stateOrders = stateOrders.filter(o => !deletedNumbers.has(o.orderNumber));
+            stateOrders = stateOrders.filter(o => o && o.orderNumber && !deletedNumbers.has(o.orderNumber));
+            
+            // Deduplicate stateOrders
+            const seenOrders = new Set<string>();
+            stateOrders = stateOrders.filter(o => {
+                if (seenOrders.has(o.orderNumber)) return false;
+                seenOrders.add(o.orderNumber);
+                return true;
+            });
+
             window.localStorage.setItem(ADMIN_ORDERS_STORAGE_KEY, JSON.stringify(stateOrders.slice(0, 100)));
+
             const userOrdersRaw = window.localStorage.getItem("watani_user_orders");
             if (userOrdersRaw) {
-                const userOrders: OrderResponse[] = JSON.parse(userOrdersRaw);
+                const userOrders: any[] = JSON.parse(userOrdersRaw);
                 const adminMap = new Map(stateOrders.map(o => [o.orderNumber, o]));
-                const updatedUserOrders = userOrders
-                    .filter(uo => !deletedNumbers.has(uo.orderNumber))
-                    .map(uo => adminMap.get(uo.orderNumber) ?? uo);
+                const updatedUserOrders: any[] = [];
+                const seenUser = new Set<string>();
+
+                for (const uo of userOrders) {
+                    if (!uo || !uo.orderNumber || deletedNumbers.has(uo.orderNumber) || seenUser.has(uo.orderNumber)) {
+                        continue;
+                    }
+                    seenUser.add(uo.orderNumber);
+                    const adminOrder = adminMap.get(uo.orderNumber);
+                    if (adminOrder) {
+                        updatedUserOrders.push({
+                            ...uo,
+                            ...adminOrder,
+                            status: adminOrder.status,
+                            paymentStatus: adminOrder.paymentStatus,
+                            timeline: adminOrder.timeline || uo.timeline
+                        });
+                    } else {
+                        updatedUserOrders.push(uo);
+                    }
+                }
                 window.localStorage.setItem("watani_user_orders", JSON.stringify(updatedUserOrders));
             }
         } catch {}
@@ -1359,18 +1399,41 @@ export function listOrders(
             const res = await apiFetch<PageResponse<OrderResponse>>(`/api/admin/orders?${params.toString()}`);
             const deletedNumbers = getDeletedOrderNumbers();
             let content = (Array.isArray(res) ? res : (res?.content || [])).filter(
-                (o: OrderResponse) => !deletedNumbers.has(o.orderNumber)
+                (o: OrderResponse) => o && o.orderNumber && !deletedNumbers.has(o.orderNumber)
             );
             if (typeof window !== "undefined") {
                 syncOrdersFromStorage();
-                const existingNos = new Set(content.map((o: OrderResponse) => o.orderNumber));
+                const stateMap = new Map(stateOrders.map(o => [(o.orderNumber || "").trim().toUpperCase(), o]));
+                content = content.map((item: OrderResponse) => {
+                    const norm = (item.orderNumber || "").trim().toUpperCase();
+                    const local = stateMap.get(norm);
+                    if (local) {
+                        return {
+                            ...item,
+                            status: (local.status && local.status !== "PENDING_PAYMENT" && local.status !== "AWAITING_PAYMENT_VERIFICATION") ? local.status : item.status,
+                            paymentStatus: (local.paymentStatus === "PAID" || local.paymentStatus === "CAPTURED") ? local.paymentStatus : item.paymentStatus,
+                            timeline: (local.timeline && local.timeline.length > (item.timeline?.length || 0)) ? local.timeline : item.timeline
+                        };
+                    }
+                    return item;
+                });
+
+                const existingNos = new Set(content.map((o: OrderResponse) => (o.orderNumber || "").trim().toUpperCase()));
                 for (const localOrder of stateOrders) {
-                    if (!deletedNumbers.has(localOrder.orderNumber) && !existingNos.has(localOrder.orderNumber)) {
+                    const norm = (localOrder.orderNumber || "").trim().toUpperCase();
+                    if (norm && !deletedNumbers.has(localOrder.orderNumber) && !deletedNumbers.has(norm) && !existingNos.has(norm)) {
                         content.unshift(localOrder);
-                        existingNos.add(localOrder.orderNumber);
+                        existingNos.add(norm);
                     }
                 }
             }
+            const seen = new Set<string>();
+            content = content.filter((o: OrderResponse) => {
+                const norm = (o.orderNumber || "").trim().toUpperCase();
+                if (!norm || seen.has(norm)) return false;
+                seen.add(norm);
+                return true;
+            });
             return {
                 ...res,
                 content,
@@ -1383,7 +1446,14 @@ export function listOrders(
                 syncOrdersFromStorage();
             }
             const deletedNumbers = getDeletedOrderNumbers();
-            const activeOrders = stateOrders.filter(o => !deletedNumbers.has(o.orderNumber));
+            let activeOrders = stateOrders.filter(o => o && o.orderNumber && !deletedNumbers.has(o.orderNumber));
+            const seen = new Set<string>();
+            activeOrders = activeOrders.filter((o: OrderResponse) => {
+                const norm = (o.orderNumber || "").trim().toUpperCase();
+                if (!norm || seen.has(norm)) return false;
+                seen.add(norm);
+                return true;
+            });
             return {
                 content: activeOrders,
                 page,
@@ -1484,17 +1554,26 @@ export function markOrderPaid(orderNumber: string, payload: MarkPaidRequest): Pr
                 method: "POST",
                 body: JSON.stringify(payload),
             });
-            const idx = stateOrders.findIndex(o => o.orderNumber === orderNumber);
-            if (idx !== -1) stateOrders[idx] = updated;
-            else stateOrders.unshift(updated);
+            if (!updated.orderNumber) updated.orderNumber = orderNumber;
+            if (!updated.paymentStatus) updated.paymentStatus = "PAID";
+            if (!updated.status || updated.status === "AWAITING_PAYMENT_VERIFICATION" || updated.status === "PENDING_PAYMENT") {
+                updated.status = "PAID";
+            }
+            const idx = stateOrders.findIndex(o => o.orderNumber === orderNumber || o.orderNumber === updated.orderNumber);
+            if (idx !== -1) {
+                stateOrders[idx] = { ...stateOrders[idx], ...updated };
+            } else {
+                stateOrders.unshift(updated);
+            }
             persistOrdersState();
             return updated;
         },
         () => {
             const match = stateOrders.find(o => o.orderNumber === orderNumber);
             if (match) {
-                match.paymentStatus = "CAPTURED";
+                match.paymentStatus = "PAID";
                 match.status = "PAID";
+                if (!match.timeline) match.timeline = [];
                 match.timeline.push({
                     status: "PAID",
                     message: payload.note ?? "Marked paid by admin",

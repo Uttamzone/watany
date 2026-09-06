@@ -171,8 +171,29 @@ function isAbandonedPending(o: any): boolean {
     return !isNaN(orderTime) && (Date.now() - orderTime) > TWO_HOURS_MS;
 }
 
+function getAdminOrdersMap(): Map<string, any> {
+    const map = new Map<string, any>();
+    if (typeof window === "undefined") return map;
+    try {
+        const raw = localStorage.getItem("watani.adminOrders.v1");
+        if (raw) {
+            const list = JSON.parse(raw);
+            if (Array.isArray(list)) {
+                for (const o of list) {
+                    if (o && o.orderNumber) {
+                        map.set(String(o.orderNumber).trim().toUpperCase(), o);
+                    }
+                }
+            }
+        }
+    } catch {}
+    return map;
+}
+
 export async function listMyOrders(page = 0, size = 20): Promise<OrderResponse[]> {
     const userEmail = getCurrentUserEmail();
+    const adminMap = getAdminOrdersMap();
+
     try {
         const res = await apiFetch<any>(`/api/orders?page=${page}&size=${size}`);
         let items: OrderResponse[] = [];
@@ -189,65 +210,144 @@ export async function listMyOrders(page = 0, size = 20): Promise<OrderResponse[]
         if (typeof window !== "undefined") {
             try {
                 const stored = localStorage.getItem("watani_user_orders");
-                if (stored) {
-                    let localOrders: OrderResponse[] = JSON.parse(stored);
-                    // Prune any abandoned Stripe checkout orders older than 2 hours
-                    localOrders = localOrders.filter(o => !isAbandonedPending(o));
-                    localStorage.setItem("watani_user_orders", JSON.stringify(localOrders));
+                let localOrders: OrderResponse[] = stored ? JSON.parse(stored) : [];
+                // Prune any abandoned Stripe checkout orders older than 2 hours
+                localOrders = localOrders.filter(o => !isAbandonedPending(o));
 
-                    const userLocalOrders = userEmail
-                        ? localOrders.filter(o => o.email && o.email.toLowerCase() === userEmail)
-                        : [];
-                    const localMap = new Map(userLocalOrders.map((o) => [o.orderNumber, o]));
-                    let localModified = false;
+                // Synchronize localOrders with admin updates
+                localOrders = localOrders.map(lo => {
+                    const norm = (lo.orderNumber || "").trim().toUpperCase();
+                    const adminMatch = adminMap.get(norm);
+                    if (adminMatch) {
+                        return {
+                            ...lo,
+                            status: (adminMatch.status && adminMatch.status !== "PENDING_PAYMENT" && adminMatch.status !== "AWAITING_PAYMENT_VERIFICATION")
+                                ? adminMatch.status
+                                : (lo.status || "PROCESSING"),
+                            paymentStatus: (adminMatch.paymentStatus === "PAID" || adminMatch.paymentStatus === "CAPTURED")
+                                ? adminMatch.paymentStatus
+                                : lo.paymentStatus,
+                            timeline: (adminMatch.timeline && adminMatch.timeline.length > (lo.timeline?.length || 0))
+                                ? adminMatch.timeline
+                                : lo.timeline
+                        };
+                    }
+                    return lo;
+                });
+                localStorage.setItem("watani_user_orders", JSON.stringify(localOrders));
 
-                    items = items.map(apiItem => {
-                        const local = localMap.get(apiItem.orderNumber);
-                        if (local) {
-                            const finalStatus = apiItem.status || local.status;
-                            const finalPaymentStatus = apiItem.paymentStatus || local.paymentStatus;
-                            if (local.status !== finalStatus || local.paymentStatus !== finalPaymentStatus) {
-                                local.status = finalStatus;
-                                local.paymentStatus = finalPaymentStatus;
-                                localModified = true;
-                            }
-                            return {
-                                ...apiItem,
-                                ...local,
-                                // Prefer API items/shippingAddress over local (stale) data
-                                items: (apiItem.items && apiItem.items.length > 0) ? apiItem.items : (local.items || []),
-                                shippingAddress: apiItem.shippingAddress || local.shippingAddress,
-                                status: finalStatus,
-                                paymentStatus: finalPaymentStatus,
-                            };
+                const userLocalOrders = userEmail
+                    ? localOrders.filter(o => !o.email || o.email.toLowerCase() === userEmail)
+                    : localOrders;
+                const localMap = new Map(userLocalOrders.map((o) => [(o.orderNumber || "").trim().toUpperCase(), o]));
+
+                items = items.map(apiItem => {
+                    const norm = (apiItem.orderNumber || "").trim().toUpperCase();
+                    const local = localMap.get(norm);
+                    const adminMatch = adminMap.get(norm);
+
+                    let status = apiItem.status;
+                    let paymentStatus = apiItem.paymentStatus;
+
+                    if (adminMatch) {
+                        if (adminMatch.paymentStatus === "PAID" || adminMatch.paymentStatus === "CAPTURED") {
+                            paymentStatus = "PAID";
                         }
-                        return apiItem;
-                    });
-
-                    if (localModified) {
-                        localStorage.setItem("watani_user_orders", JSON.stringify(localOrders));
+                        if (adminMatch.status === "PAID" || status === "PENDING_PAYMENT" || status === "AWAITING_PAYMENT_VERIFICATION") {
+                            status = adminMatch.status || "PAID";
+                        }
+                    } else if (local) {
+                        if (local.paymentStatus === "PAID" || local.paymentStatus === "CAPTURED") {
+                            paymentStatus = "PAID";
+                        }
+                        if (local.status === "PAID" || status === "PENDING_PAYMENT" || status === "AWAITING_PAYMENT_VERIFICATION") {
+                            status = local.status || status;
+                        }
                     }
 
-                    const existingNos = new Set(items.map((o) => o.orderNumber));
-                    for (const lo of userLocalOrders) {
-                        if (!existingNos.has(lo.orderNumber) && !isAbandonedPending(lo)) {
-                            items.unshift(lo);
-                            existingNos.add(lo.orderNumber);
-                        }
+                    return {
+                        ...(local || {}),
+                        ...apiItem,
+                        // Prefer API items/shippingAddress over local (stale) data
+                        items: (apiItem.items && apiItem.items.length > 0) ? apiItem.items : (local?.items || []),
+                        shippingAddress: apiItem.shippingAddress || local?.shippingAddress,
+                        status,
+                        paymentStatus,
+                        timeline: (adminMatch?.timeline && adminMatch.timeline.length > (apiItem.timeline?.length || 0))
+                            ? adminMatch.timeline
+                            : (apiItem.timeline || local?.timeline)
+                    };
+                });
+
+                const existingNos = new Set(items.map((o) => (o.orderNumber || "").trim().toUpperCase()));
+                for (const lo of userLocalOrders) {
+                    const norm = (lo.orderNumber || "").trim().toUpperCase();
+                    if (norm && !existingNos.has(norm) && !isAbandonedPending(lo)) {
+                        items.unshift(lo);
+                        existingNos.add(norm);
                     }
                 }
             } catch {}
         }
-        return items.filter(o => !isAbandonedPending(o));
+
+        // Strictly deduplicate returned items
+        const seen = new Set<string>();
+        return items.filter(o => {
+            if (!o || isAbandonedPending(o)) return false;
+            const norm = (o.orderNumber || "").trim().toUpperCase();
+            if (!norm || seen.has(norm)) return false;
+            seen.add(norm);
+            return true;
+        });
     } catch {
         if (typeof window !== "undefined") {
             try {
                 const stored = localStorage.getItem("watani_user_orders");
-                if (stored && userEmail) {
-                    const parsed: OrderResponse[] = JSON.parse(stored);
-                    const valid = parsed.filter(o => !isAbandonedPending(o));
-                    return valid.filter(o => o.email && o.email.toLowerCase() === userEmail);
+                let list: OrderResponse[] = stored ? JSON.parse(stored) : [];
+                list = list.filter(o => !isAbandonedPending(o));
+
+                if (userEmail) {
+                    list = list.filter(o => !o.email || o.email.toLowerCase() === userEmail);
                 }
+
+                list = list.map(item => {
+                    const norm = (item.orderNumber || "").trim().toUpperCase();
+                    const adminMatch = adminMap.get(norm);
+                    if (adminMatch) {
+                        return {
+                            ...item,
+                            status: (adminMatch.status && adminMatch.status !== "PENDING_PAYMENT" && adminMatch.status !== "AWAITING_PAYMENT_VERIFICATION")
+                                ? adminMatch.status
+                                : item.status,
+                            paymentStatus: (adminMatch.paymentStatus === "PAID" || adminMatch.paymentStatus === "CAPTURED")
+                                ? adminMatch.paymentStatus
+                                : item.paymentStatus,
+                            timeline: (adminMatch.timeline && adminMatch.timeline.length > (item.timeline?.length || 0))
+                                ? adminMatch.timeline
+                                : item.timeline
+                        };
+                    }
+                    return item;
+                });
+
+                // Check if adminOrders has orders belonging to this user not yet in watani_user_orders
+                const existingNos = new Set(list.map(o => (o.orderNumber || "").trim().toUpperCase()));
+                for (const [norm, adminOrder] of adminMap.entries()) {
+                    if (!existingNos.has(norm) && !isAbandonedPending(adminOrder)) {
+                        if (!userEmail || !adminOrder.email || adminOrder.email.toLowerCase() === userEmail) {
+                            list.unshift(adminOrder);
+                            existingNos.add(norm);
+                        }
+                    }
+                }
+
+                const seen = new Set<string>();
+                return list.filter(o => {
+                    const norm = (o.orderNumber || "").trim().toUpperCase();
+                    if (!norm || seen.has(norm)) return false;
+                    seen.add(norm);
+                    return true;
+                });
             } catch {}
         }
         return [];
@@ -256,43 +356,76 @@ export async function listMyOrders(page = 0, size = 20): Promise<OrderResponse[]
 
 export async function getMyOrder(orderNumber: string): Promise<OrderResponse> {
     const userEmail = getCurrentUserEmail();
+    const adminMap = getAdminOrdersMap();
+    const normNum = (orderNumber || "").trim().toUpperCase();
+    const adminMatch = adminMap.get(normNum);
+
     try {
         const apiOrder = await apiFetch<OrderResponse>(`/api/orders/${encodeURIComponent(orderNumber)}`);
+        let finalStatus = apiOrder.status;
+        let finalPaymentStatus = apiOrder.paymentStatus;
+
+        if (adminMatch) {
+            if (adminMatch.paymentStatus === "PAID" || adminMatch.paymentStatus === "CAPTURED") {
+                finalPaymentStatus = "PAID";
+            }
+            if (adminMatch.status === "PAID" || finalStatus === "PENDING_PAYMENT" || finalStatus === "AWAITING_PAYMENT_VERIFICATION") {
+                finalStatus = adminMatch.status || "PAID";
+            }
+        }
+
         if (typeof window !== "undefined") {
             try {
                 const stored = localStorage.getItem("watani_user_orders");
                 if (stored) {
                     let parsed: OrderResponse[] = JSON.parse(stored);
                     parsed = parsed.filter(o => !isAbandonedPending(o));
-                    const local = parsed.find((o) => o.orderNumber === orderNumber && (!userEmail || !o.email || o.email.toLowerCase() === userEmail));
-                    if (local) {
-                        const finalStatus = apiOrder.status || local.status;
-                        const finalPaymentStatus = apiOrder.paymentStatus || local.paymentStatus;
-                        local.status = finalStatus;
-                        local.paymentStatus = finalPaymentStatus;
-                        localStorage.setItem("watani_user_orders", JSON.stringify(parsed));
-                        return {
+                    const idx = parsed.findIndex(o => (o.orderNumber || "").trim().toUpperCase() === normNum);
+                    if (idx !== -1) {
+                        parsed[idx] = {
+                            ...parsed[idx],
                             ...apiOrder,
-                            ...local,
-                            // Prefer API items/shippingAddress over stale local data
-                            items: (apiOrder.items && apiOrder.items.length > 0) ? apiOrder.items : (local.items || []),
-                            shippingAddress: apiOrder.shippingAddress || local.shippingAddress,
                             status: finalStatus,
                             paymentStatus: finalPaymentStatus,
+                            timeline: (adminMatch?.timeline && adminMatch.timeline.length > (apiOrder.timeline?.length || 0))
+                                ? adminMatch.timeline
+                                : (apiOrder.timeline || parsed[idx].timeline)
                         };
+                        localStorage.setItem("watani_user_orders", JSON.stringify(parsed));
                     }
                 }
             } catch {}
         }
-        return apiOrder;
+
+        return {
+            ...apiOrder,
+            status: finalStatus,
+            paymentStatus: finalPaymentStatus,
+            timeline: (adminMatch?.timeline && adminMatch.timeline.length > (apiOrder.timeline?.length || 0))
+                ? adminMatch.timeline
+                : apiOrder.timeline
+        };
     } catch (error) {
         if (typeof window !== "undefined") {
             try {
+                if (adminMatch && (!userEmail || !adminMatch.email || adminMatch.email.toLowerCase() === userEmail)) {
+                    return adminMatch;
+                }
                 const stored = localStorage.getItem("watani_user_orders");
                 if (stored) {
                     const parsed: OrderResponse[] = JSON.parse(stored);
-                    const match = parsed.find((o) => o.orderNumber === orderNumber && (!userEmail || !o.email || o.email.toLowerCase() === userEmail));
-                    if (match && !isAbandonedPending(match)) return match;
+                    const match = parsed.find(o => (o.orderNumber || "").trim().toUpperCase() === normNum && (!userEmail || !o.email || o.email.toLowerCase() === userEmail));
+                    if (match && !isAbandonedPending(match)) {
+                        if (adminMatch) {
+                            return {
+                                ...match,
+                                status: adminMatch.status || match.status,
+                                paymentStatus: adminMatch.paymentStatus || match.paymentStatus,
+                                timeline: adminMatch.timeline || match.timeline
+                            };
+                        }
+                        return match;
+                    }
                 }
             } catch {}
         }

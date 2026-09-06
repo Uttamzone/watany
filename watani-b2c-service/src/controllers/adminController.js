@@ -634,34 +634,39 @@ async function updateStock(req, res) {
 /* ---------------------------------------------------------------- Orders */
 
 function formatOrderRow(order, items = []) {
+    const orderNum = order.orderNumber || order.order_number;
+    const statusVal = order.status || 'PLACED';
+    const payStatusVal = order.paymentStatus || order.payment_status || 'PAID';
+    const payMethodVal = order.paymentMethod || order.payment_provider || 'STRIPE';
+    const priceGroupVal = order.pricingGroup || order.pricing_group || 'RETAIL';
     return {
         id: order.id,
-        orderNumber: order.orderNumber,
+        orderNumber: orderNum,
         email: order.email,
-        status: order.status || 'PLACED',
-        paymentStatus: order.paymentStatus || 'PAID',
-        paymentMethod: order.paymentMethod || 'STRIPE',
-        pricingGroup: order.pricingGroup || 'RETAIL',
+        status: statusVal,
+        paymentStatus: payStatusVal,
+        paymentMethod: payMethodVal,
+        pricingGroup: priceGroupVal,
         subtotal: parseFloat(order.subtotal) || 0,
-        discountTotal: parseFloat(order.discountTotal) || 0,
-        shippingTotal: parseFloat(order.shippingTotal) || 0,
-        taxTotal: parseFloat(order.taxTotal) || 0,
-        grandTotal: parseFloat(order.grandTotal) || 0,
-        refundedTotal: 0,
+        discountTotal: parseFloat(order.discountTotal || order.discount_total) || 0,
+        shippingTotal: parseFloat(order.shippingTotal || order.shipping_total) || 0,
+        taxTotal: parseFloat(order.taxTotal || order.tax_total) || 0,
+        grandTotal: parseFloat(order.grandTotal || order.grand_total) || 0,
+        refundedTotal: parseFloat(order.refundedTotal || order.refunded_total) || 0,
         currency: order.currency || 'CAD',
-        couponCode: null,
-        carrierName: order.carrierName || 'Freightcom Direct',
-        shippingMethod: order.shippingMethod || 'Freightcom Standard Shipping',
-        trackingNumber: order.trackingNumber || null,
-        trackingUrl: order.trackingUrl || null,
-        labelUrl: null,
+        couponCode: order.couponCode || order.coupon_code || null,
+        carrierName: order.carrierName || order.carrier_name || 'Freightcom Direct',
+        shippingMethod: order.shippingMethod || order.shipping_method || 'Freightcom Standard Shipping',
+        trackingNumber: order.trackingNumber || order.tracking_number || null,
+        trackingUrl: order.trackingUrl || order.tracking_url || null,
+        labelUrl: order.labelUrl || order.label_url || null,
         shippingAddress: {
-            fullName: order.shipFullName || 'Customer',
-            line1: order.shipLine1 || '300 Greenbank Rd',
-            city: order.shipCity || 'Ottawa',
-            region: order.shipRegion || 'ON',
-            postalCode: order.shipPostalCode || 'K2H 0B6',
-            country: order.shipCountry || 'CA'
+            fullName: order.shipFullName || order.ship_full_name || 'Customer',
+            line1: order.shipLine1 || order.ship_line1 || '300 Greenbank Rd',
+            city: order.shipCity || order.ship_city || 'Ottawa',
+            region: order.shipRegion || order.ship_region || 'ON',
+            postalCode: order.shipPostalCode || order.ship_postal_code || 'K2H 0B6',
+            country: order.shipCountry || order.ship_country || 'CA'
         },
         items: items.map(item => ({
             id: item.id,
@@ -680,12 +685,12 @@ function formatOrderRow(order, items = []) {
         })),
         timeline: [
             {
-                status: order.status || 'PLACED',
-                message: `Order is currently ${order.status || 'PLACED'}`,
-                at: order.createdAt || new Date().toISOString()
+                status: statusVal,
+                message: `Order is currently ${statusVal}`,
+                at: order.createdAt || order.created_at || new Date().toISOString()
             }
         ],
-        placedAt: order.placedAt || order.createdAt || new Date().toISOString(),
+        placedAt: order.placedAt || order.placed_at || order.createdAt || order.created_at || new Date().toISOString(),
         reviewToken: null
     };
 }
@@ -856,7 +861,8 @@ async function markOrderPaid(req, res) {
         const { reference, note } = req.body || {};
         const { rows } = await db.query(`
             UPDATE orders
-            SET payment_status = 'PAID', status = 'PROCESSING',
+            SET payment_status = 'PAID',
+                status = CASE WHEN status IN ('PENDING_PAYMENT', 'AWAITING_PAYMENT_VERIFICATION', 'PLACED') THEN 'PAID' ELSE status END,
                 payment_provider_ref = COALESCE($1, payment_provider_ref),
                 updated_at = NOW()
             WHERE order_number = $2 OR id::text = $2
