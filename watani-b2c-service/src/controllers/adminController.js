@@ -2217,6 +2217,13 @@ async function updateOrderBoxes(req, res) {
         `, [orderId]);
         const updatedOrderRes = await db.query('SELECT * FROM orders WHERE id = $1', [orderId]);
         const itemsRes = await db.query('SELECT * FROM order_items WHERE order_id = $1', [orderId]);
+        await logAudit({
+            req,
+            action: 'ORDER_PACKED',
+            entityType: 'ORDER',
+            entityId: orderNumber,
+            newValue: { boxCount: saved.length }
+        });
         return res.json({
             boxes: saved,
             order: formatOrderRow(updatedOrderRes.rows[0], itemsRes.rows)
@@ -2277,6 +2284,15 @@ async function bookOrderShipment(req, res) {
 
         if (rows.length === 0) return res.status(404).json({ error: 'Not Found', message: 'Order not found' });
         const itemsRes = await db.query('SELECT * FROM order_items WHERE order_id = $1', [rows[0].id]);
+
+        await logAudit({
+            req,
+            action: 'SHIPMENT_BOOKED',
+            entityType: 'ORDER',
+            entityId: orderNumber,
+            newValue: { carrierName, trackingNumber, trackingUrl }
+        });
+
         return res.json({
             order: formatOrderRow(rows[0], itemsRes.rows),
             carrierCost: 18.50
@@ -2298,6 +2314,15 @@ async function cancelOrderShipment(req, res) {
 
         if (rows.length === 0) return res.status(404).json({ error: 'Not Found', message: 'Order not found' });
         const itemsRes = await db.query('SELECT * FROM order_items WHERE order_id = $1', [rows[0].id]);
+
+        await logAudit({
+            req,
+            action: 'SHIPMENT_CANCELLED',
+            entityType: 'ORDER',
+            entityId: orderNumber,
+            newValue: { status: 'PROCESSING', shipmentCancelled: true }
+        });
+
         return res.json({
             order: formatOrderRow(rows[0], itemsRes.rows),
             carrierCost: null

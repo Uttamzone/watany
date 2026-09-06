@@ -367,6 +367,76 @@ const ADMIN_ORDERS_STORAGE_KEY = "watani.adminOrders.v1";
 const ADMIN_DELETED_ORDERS_KEY = "watani.adminDeletedOrders.v1";
 const ADMIN_REVIEWS_STORAGE_KEY = "watani.adminReviews.v1";
 const ADMIN_CUSTOMERS_STORAGE_KEY = "watani.adminCustomers.v1";
+const ADMIN_AUDIT_STORAGE_KEY = "watani.adminAudit.v1";
+
+let stateAuditLogs: AuditLog[] = [
+    {
+        id: 1,
+        actor: "admin@wataniandsons.ca",
+        action: "CATALOGUE_SYNC",
+        entityType: "CATALOGUE",
+        entityId: "live_seed",
+        previousValue: null,
+        newValue: "Authentic 226 Palestinian catalogue products synchronized",
+        ipAddress: "10.42.0.1",
+        createdAt: new Date(Date.now() - 3600 * 1000).toISOString(),
+    },
+    {
+        id: 2,
+        actor: "system_initializer",
+        action: "SYSTEM_BOOT",
+        entityType: "SYSTEM",
+        entityId: "cluster",
+        previousValue: null,
+        newValue: "Watani B2C services initialized and online",
+        ipAddress: "127.0.0.1",
+        createdAt: new Date(Date.now() - 7200 * 1000).toISOString(),
+    }
+];
+
+export function getStoredAuditLogs(): AuditLog[] {
+    if (typeof window === "undefined") return stateAuditLogs;
+    try {
+        const raw = window.localStorage.getItem(ADMIN_AUDIT_STORAGE_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                return parsed;
+            }
+        }
+    } catch {}
+    return stateAuditLogs;
+}
+
+export function recordAuditLog(entry: {
+    action: string;
+    entityType: string;
+    entityId: string;
+    previousValue?: string | null;
+    newValue?: string | null;
+    actor?: string;
+}): void {
+    if (typeof window === "undefined") return;
+    try {
+        const current = getStoredAuditLogs();
+        const newLog: AuditLog = {
+            id: Date.now(),
+            actor: entry.actor || "admin@wataniandsons.ca",
+            action: entry.action,
+            entityType: entry.entityType,
+            entityId: String(entry.entityId),
+            previousValue: entry.previousValue ?? null,
+            newValue: entry.newValue ?? null,
+            ipAddress: "127.0.0.1",
+            createdAt: new Date().toISOString()
+        };
+        const updated = [newLog, ...current.filter(item => item.id !== newLog.id)].slice(0, 500);
+        stateAuditLogs = updated;
+        window.localStorage.setItem(ADMIN_AUDIT_STORAGE_KEY, JSON.stringify(updated));
+    } catch (err) {
+        console.warn("Failed to record audit log:", err);
+    }
+}
 
 export function getDeletedOrderNumbers(): Set<string> {
     if (typeof window === "undefined") return new Set();
@@ -1024,6 +1094,12 @@ function buildMockProductResponse(payload: ProductRequest): AdminProductResponse
 }
 
 export function createProduct(payload: ProductRequest): Promise<AdminProductResponse> {
+    recordAuditLog({
+        action: "PRODUCT_CREATED",
+        entityType: "PRODUCT",
+        entityId: payload.name,
+        newValue: `SKU: ${payload.variants?.[0]?.sku || payload.slug || "N/A"}`
+    });
     return fetchWithFallback(
         () => apiFetch<AdminProductResponse>("/api/admin/catalogue/products", {
             method: "POST",
@@ -1039,6 +1115,12 @@ export function createProduct(payload: ProductRequest): Promise<AdminProductResp
 }
 
 export function updateProduct(slug: string, payload: ProductRequest): Promise<AdminProductResponse> {
+    recordAuditLog({
+        action: "PRODUCT_UPDATED",
+        entityType: "PRODUCT",
+        entityId: slug,
+        newValue: `Updated ${payload.name}`
+    });
     return fetchWithFallback(
         () => apiFetch<AdminProductResponse>(`/api/admin/catalogue/products/${encodeURIComponent(slug)}`, {
             method: "PUT",
@@ -1059,6 +1141,12 @@ export function updateProduct(slug: string, payload: ProductRequest): Promise<Ad
 }
 
 export function deleteProduct(slug: string): Promise<void> {
+    recordAuditLog({
+        action: "PRODUCT_DELETED",
+        entityType: "PRODUCT",
+        entityId: slug,
+        newValue: "Deleted product from catalogue"
+    });
     return fetchWithFallback(
         () => apiFetch<void>(`/api/admin/catalogue/products/${encodeURIComponent(slug)}`, {
             method: "DELETE",
@@ -1128,6 +1216,12 @@ export function downloadFailedRowsWorkbook(base64: string) {
 }
 
 export function updateStock(sku: string, payload: StockUpdateRequest): Promise<AdminVariantResponse> {
+    recordAuditLog({
+        action: "STOCK_UPDATED",
+        entityType: "INVENTORY",
+        entityId: sku,
+        newValue: `Qty: ${payload.stockQuantity}`
+    });
     return fetchWithFallback(
         () => apiFetch<AdminVariantResponse>(`/api/admin/catalogue/variants/${encodeURIComponent(sku)}/stock`, {
             method: "PUT",
@@ -1337,6 +1431,14 @@ export function transitionOrder(
     orderNumber: string,
     payload: StatusTransitionRequest,
 ): Promise<OrderResponse> {
+    const prevOrder = stateOrders.find(o => o.orderNumber === orderNumber);
+    recordAuditLog({
+        action: "ORDER_STATUS_UPDATE",
+        entityType: "ORDER",
+        entityId: orderNumber,
+        previousValue: prevOrder?.status || null,
+        newValue: payload.status
+    });
     return fetchWithFallback(
         async () => {
             const updated = await apiFetch<OrderResponse>(`/api/admin/orders/${encodeURIComponent(orderNumber)}/status`, {
@@ -1370,6 +1472,12 @@ export function transitionOrder(
 }
 
 export function markOrderPaid(orderNumber: string, payload: MarkPaidRequest): Promise<OrderResponse> {
+    recordAuditLog({
+        action: "ORDER_PAID",
+        entityType: "ORDER",
+        entityId: orderNumber,
+        newValue: payload.reference ? `Reference: ${payload.reference}` : (payload.note || "Marked paid by admin")
+    });
     return fetchWithFallback(
         async () => {
             const updated = await apiFetch<OrderResponse>(`/api/admin/orders/${encodeURIComponent(orderNumber)}/mark-paid`, {
@@ -1401,6 +1509,12 @@ export function markOrderPaid(orderNumber: string, payload: MarkPaidRequest): Pr
 }
 
 export function markOrderUnpaid(orderNumber: string, note?: string): Promise<OrderResponse> {
+    recordAuditLog({
+        action: "ORDER_MARKED_UNPAID",
+        entityType: "ORDER",
+        entityId: orderNumber,
+        newValue: note ? `Note: ${note}` : "Status reverted to unpaid"
+    });
     return fetchWithFallback(
         async () => {
             const updated = await apiFetch<OrderResponse>(`/api/admin/orders/${encodeURIComponent(orderNumber)}/unpaid`, {
@@ -1430,6 +1544,12 @@ export function markOrderUnpaid(orderNumber: string, note?: string): Promise<Ord
 }
 
 export function refundOrder(orderNumber: string, payload: RefundRequest): Promise<OrderResponse> {
+    recordAuditLog({
+        action: "ORDER_REFUNDED",
+        entityType: "ORDER",
+        entityId: orderNumber,
+        newValue: payload.amount ? `Refunded $${payload.amount}` : "Full refund"
+    });
     return fetchWithFallback(
         async () => {
             const updated = await apiFetch<OrderResponse>(`/api/admin/orders/${encodeURIComponent(orderNumber)}/refund`, {
@@ -1461,6 +1581,12 @@ export function refundOrder(orderNumber: string, payload: RefundRequest): Promis
 }
 
 export function deleteOrder(orderNumber: string): Promise<void> {
+    recordAuditLog({
+        action: "ORDER_DELETED",
+        entityType: "ORDER",
+        entityId: orderNumber,
+        newValue: "Order deleted from system"
+    });
     recordOrderDeleted(orderNumber);
     return fetchWithFallback(
         async () => {
@@ -1483,6 +1609,12 @@ export function getOrderBoxes(orderNumber: string): Promise<OrderBoxResponse[]> 
 }
 
 export function packOrder(orderNumber: string, payload: ReplaceBoxesRequest): Promise<BoxesResponse> {
+    recordAuditLog({
+        action: "ORDER_PACKED",
+        entityType: "ORDER",
+        entityId: orderNumber,
+        newValue: `${payload.boxes.length} box(es) configured`
+    });
     return fetchWithFallback(
         async () => {
             const res = await apiFetch<BoxesResponse>(`/api/admin/orders/${encodeURIComponent(orderNumber)}/boxes`, {
@@ -1546,6 +1678,12 @@ export function quoteShippingRates(orderNumber: string): Promise<ShippingRateOpt
 }
 
 export function bookShipment(orderNumber: string, payload: BookShipmentRequest): Promise<AdminOrderDetail> {
+    recordAuditLog({
+        action: "SHIPMENT_BOOKED",
+        entityType: "ORDER",
+        entityId: orderNumber,
+        newValue: `${payload.serviceCode || "Carrier"} shipping booked`
+    });
     return fetchWithFallback(
         async () => {
             const updated = await apiFetch<AdminOrderDetail>(`/api/admin/orders/${encodeURIComponent(orderNumber)}/shipment`, {
@@ -1580,6 +1718,12 @@ export function bookShipment(orderNumber: string, payload: BookShipmentRequest):
 }
 
 export function cancelShipment(orderNumber: string): Promise<AdminOrderDetail> {
+    recordAuditLog({
+        action: "SHIPMENT_CANCELLED",
+        entityType: "ORDER",
+        entityId: orderNumber,
+        newValue: "Shipment cancelled by admin"
+    });
     return fetchWithFallback(
         async () => {
             const updated = await apiFetch<AdminOrderDetail>(`/api/admin/orders/${encodeURIComponent(orderNumber)}/shipment`, {
@@ -1680,6 +1824,12 @@ export function decideApproval(
     userId: number,
     payload: ApprovalDecisionRequest,
 ): Promise<CustomerResponse> {
+    recordAuditLog({
+        action: payload.approve ? "CUSTOMER_APPROVED" : "CUSTOMER_REJECTED",
+        entityType: "CUSTOMER",
+        entityId: String(userId),
+        newValue: payload.targetGroup || (payload.approve ? "APPROVED" : "REJECTED")
+    });
     return fetchWithFallback(
         () => apiFetch<CustomerResponse>(`/api/admin/customers/${userId}/approval`, {
             method: "POST",
@@ -1709,6 +1859,12 @@ export function assignPricingGroup(
     userId: number,
     payload: AssignGroupRequest,
 ): Promise<CustomerResponse> {
+    recordAuditLog({
+        action: "PRICING_GROUP_ASSIGNED",
+        entityType: "CUSTOMER",
+        entityId: String(userId),
+        newValue: payload.pricingGroup
+    });
     return fetchWithFallback(
         () => apiFetch<CustomerResponse>(`/api/admin/customers/${userId}/pricing-group`, {
             method: "PUT",
@@ -1944,29 +2100,44 @@ export function salesReport(
     );
 }
 
-export function auditLog(page: number, size = 50): Promise<PageResponse<AuditLog>> {
-    return fetchWithFallback(
-        () => apiFetch<PageResponse<AuditLog>>(`/api/admin/audit?page=${page}&size=${size}`),
-        {
-            content: [
-                {
-                    id: 1,
-                    actor: "wataniadmin@wataniandsons.ca",
-                    action: "ORDER_STATUS_UPDATE",
-                    entityType: "ORDER",
-                    entityId: "ORD-2026-1001",
-                    previousValue: "PLACED",
-                    newValue: "PROCESSING",
-                    ipAddress: "127.0.0.1",
-                    createdAt: new Date().toISOString()
-                }
-            ],
+export async function auditLog(page: number, size = 50): Promise<PageResponse<AuditLog>> {
+    const localLogs = getStoredAuditLogs();
+    try {
+        const res = await apiFetch<PageResponse<AuditLog>>(`/api/admin/audit?page=${page}&size=${size}`);
+        const backendItems = res?.content || [];
+        const merged = [...backendItems];
+        for (const local of localLogs) {
+            const alreadyPresent = merged.some(
+                item => item.id === local.id || 
+                (item.action === local.action && item.entityId === local.entityId && Math.abs(new Date(item.createdAt).getTime() - new Date(local.createdAt).getTime()) < 10000)
+            );
+            if (!alreadyPresent) {
+                merged.push(local);
+            }
+        }
+        merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        const offset = page * size;
+        const pageItems = merged.slice(offset, offset + size);
+        const total = Math.max(res.totalElements || 0, merged.length);
+        return {
+            content: pageItems,
             page,
             size,
-            totalElements: 1,
-            totalPages: 1
-        }
-    );
+            totalElements: total,
+            totalPages: Math.ceil(total / size) || 1,
+        };
+    } catch {
+        const sorted = [...localLogs].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        const offset = page * size;
+        const pageItems = sorted.slice(offset, offset + size);
+        return {
+            content: pageItems,
+            page,
+            size,
+            totalElements: sorted.length,
+            totalPages: Math.ceil(sorted.length / size) || 1,
+        };
+    }
 }
 
 // Marketing - /api/admin/coupons, /api/admin/reviews, /api/admin/content

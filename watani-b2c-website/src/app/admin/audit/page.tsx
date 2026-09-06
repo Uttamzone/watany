@@ -1,7 +1,7 @@
 "use client";
 
-import {useEffect, useState} from "react";
-import {ChevronDown, ChevronUp} from "lucide-react";
+import {useCallback, useEffect, useState} from "react";
+import {ChevronDown, ChevronUp, RefreshCw} from "lucide-react";
 import * as adminApi from "@/lib/admin/api";
 import type {AuditLog} from "@/lib/admin/types";
 import {AdminTable, type AdminTableColumn} from "@/components/admin/admin-table";
@@ -9,6 +9,16 @@ import {ApiError} from "@/lib/api";
 import {useNotifications} from "@/components/notifications/notification-store";
 
 const PAGE_SIZE = 10;
+
+function formatLogValue(val: string | null | undefined): string {
+    if (!val) return "-";
+    try {
+        const parsed = JSON.parse(val);
+        return JSON.stringify(parsed, null, 2);
+    } catch {
+        return val;
+    }
+}
 
 export default function AdminAuditPage() {
     const notifications = useNotifications();
@@ -20,7 +30,9 @@ export default function AdminAuditPage() {
     const [error, setError] = useState<string | null>(null);
     const [expanded, setExpanded] = useState<number | null>(null);
 
-    useEffect(() => {
+    const loadLogs = useCallback(() => {
+        setLoading(true);
+        setError(null);
         adminApi
             .auditLog(page, PAGE_SIZE)
             .then((result) => {
@@ -34,8 +46,28 @@ export default function AdminAuditPage() {
                 notifications.error("Failed to load audit log", message);
             })
             .finally(() => setLoading(false));
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page]);
+    }, [page, notifications]);
+
+    useEffect(() => {
+        loadLogs();
+    }, [loadLogs]);
+
+    useEffect(() => {
+        const handleVisibility = () => {
+            if (document.visibilityState === "visible") {
+                loadLogs();
+            }
+        };
+        const handleFocus = () => {
+            loadLogs();
+        };
+        window.addEventListener("focus", handleFocus);
+        document.addEventListener("visibilitychange", handleVisibility);
+        return () => {
+            window.removeEventListener("focus", handleFocus);
+            document.removeEventListener("visibilitychange", handleVisibility);
+        };
+    }, [loadLogs]);
 
     function handlePageChange(nextPage: number) {
         setLoading(true);
@@ -74,9 +106,20 @@ export default function AdminAuditPage() {
 
     return (
         <div>
-            <div>
-                <h1 className="text-[26px] font-extrabold text-teal-950">Audit log</h1>
-                <p className="mt-1 text-[13px] text-muted">Track every change made across the admin portal.</p>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                    <h1 className="text-[26px] font-extrabold text-teal-950">Audit log</h1>
+                    <p className="mt-1 text-[13px] text-muted">Track every change made across the admin portal.</p>
+                </div>
+                <button
+                    type="button"
+                    onClick={loadLogs}
+                    disabled={loading}
+                    className="inline-flex items-center gap-2 self-start rounded-xl border border-teal-950/15 bg-white px-3.5 py-2 text-[13px] font-bold text-teal-950 shadow-sm transition hover:bg-soft-control hover:border-teal-950/30 disabled:opacity-50"
+                >
+                    <RefreshCw className={`size-4 ${loading ? "animate-spin text-teal-700" : "text-muted"}`} />
+                    Refresh
+                </button>
             </div>
 
             {error && (
@@ -103,14 +146,14 @@ export default function AdminAuditPage() {
                         <div>
                             <p className="text-[11px] font-bold text-muted">Previous value</p>
                             <pre className="mt-1 whitespace-pre-wrap rounded-lg bg-soft-control p-3 text-[11px]">
-                {activeRow.previousValue ?? "-"}
-              </pre>
+                                {formatLogValue(activeRow.previousValue)}
+                            </pre>
                         </div>
                         <div>
                             <p className="text-[11px] font-bold text-muted">New value</p>
                             <pre className="mt-1 whitespace-pre-wrap rounded-lg bg-soft-control p-3 text-[11px]">
-                {activeRow.newValue ?? "-"}
-              </pre>
+                                {formatLogValue(activeRow.newValue)}
+                            </pre>
                         </div>
                     </div>
                 </div>
@@ -118,3 +161,4 @@ export default function AdminAuditPage() {
         </div>
     );
 }
+
