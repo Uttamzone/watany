@@ -106,6 +106,7 @@ mapRoute('get', ['/v1/admin/orders/:orderNumber', '/admin/orders/:orderNumber'],
 mapRoute(['put', 'post'], ['/v1/admin/orders/:orderNumber/status', '/admin/orders/:orderNumber/status', '/v1/admin/orders/:orderNumber/transition', '/admin/orders/:orderNumber/transition'], verifyToken, requireAdmin, admin.updateOrderStatus);
 mapRoute('post', ['/v1/admin/orders/:orderNumber/paid', '/admin/orders/:orderNumber/paid', '/v1/admin/orders/:orderNumber/mark-paid', '/admin/orders/:orderNumber/mark-paid'], verifyToken, requireAdmin, admin.markOrderPaid);
 mapRoute('post', ['/v1/admin/orders/:orderNumber/refund', '/admin/orders/:orderNumber/refund'], verifyToken, requireAdmin, admin.refundOrder);
+mapRoute('delete', ['/v1/admin/orders/:orderNumber', '/admin/orders/:orderNumber'], verifyToken, requireAdmin, admin.deleteOrder);
 mapRoute('get', ['/v1/admin/orders/:orderNumber/boxes', '/admin/orders/:orderNumber/boxes'], verifyToken, requireAdmin, admin.getOrderBoxes);
 mapRoute('put', ['/v1/admin/orders/:orderNumber/boxes', '/admin/orders/:orderNumber/boxes'], verifyToken, requireAdmin, admin.updateOrderBoxes);
 mapRoute('post', ['/v1/admin/orders/:orderNumber/rates', '/admin/orders/:orderNumber/rates'], verifyToken, requireAdmin, admin.getOrderRates);

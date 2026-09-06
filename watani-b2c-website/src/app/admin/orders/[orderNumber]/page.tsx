@@ -2,7 +2,8 @@
 
 import {use, useEffect, useState} from "react";
 import Link from "next/link";
-import {ArrowLeft, ArrowRight, BadgeCheck, ClipboardList, ReceiptText} from "lucide-react";
+import {useRouter} from "next/navigation";
+import {ArrowLeft, ArrowRight, BadgeCheck, ClipboardList, ReceiptText, Trash2} from "lucide-react";
 import * as adminApi from "@/lib/admin/api";
 import type {OrderResponse, OrderStatus} from "@/lib/admin/types";
 import {ORDER_STATUS_TRANSITIONS} from "@/lib/admin/types";
@@ -38,6 +39,7 @@ export default function AdminOrderDetailPage({
 }) {
     const {orderNumber} = use(params);
     const notifications = useNotifications();
+    const router = useRouter();
     const [order, setOrder] = useState<OrderResponse | null>(null);
     /** What Watani paid the carrier for the booked shipment - admin-only, never shown to the customer. */
     const [carrierCost, setCarrierCost] = useState<number | null>(null);
@@ -48,6 +50,8 @@ export default function AdminOrderDetailPage({
     const [markPaidOpen, setMarkPaidOpen] = useState(false);
     const [markPaidReference, setMarkPaidReference] = useState("");
     const [markPaidNote, setMarkPaidNote] = useState("");
+    const [deleteOpen, setDeleteOpen] = useState(false);
+    const [deleting, setDeleting] = useState(false);
 
     function load() {
         adminApi
@@ -103,6 +107,20 @@ export default function AdminOrderDetailPage({
         } finally {
             setRefundOpen(false);
             setRefundAmount("");
+        }
+    }
+
+    async function applyDelete() {
+        setDeleting(true);
+        try {
+            await adminApi.deleteOrder(orderNumber);
+            notifications.success("Order deleted", `Order ${orderNumber} has been permanently deleted.`);
+            router.push("/admin/orders");
+        } catch (err) {
+            const message = err instanceof ApiError ? err.message : "Failed to delete order.";
+            notifications.error("Delete order failed", message);
+            setDeleting(false);
+            setDeleteOpen(false);
         }
     }
 
@@ -335,6 +353,24 @@ export default function AdminOrderDetailPage({
                             Issue refund
                         </button>
                     </div>
+
+                    <div className="rounded-2xl bg-white p-5 shadow-card border border-coral/20">
+                        <div className="flex items-center gap-2">
+                            <Trash2 className="size-4 text-coral" aria-hidden/>
+                            <h2 className="text-[15px] font-bold text-coral">Delete Order</h2>
+                        </div>
+                        <p className="mt-1 text-[12px] text-muted">
+                            Permanently remove this order and all associated items and box records from the store.
+                        </p>
+                        <button
+                            type="button"
+                            onClick={() => setDeleteOpen(true)}
+                            className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-coral/10 text-[13px] font-bold text-coral transition-colors hover:bg-coral hover:text-white cursor-pointer"
+                        >
+                            <Trash2 className="size-4" aria-hidden/>
+                            Delete order
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -370,6 +406,16 @@ export default function AdminOrderDetailPage({
                 danger
                 onCancel={() => setRefundOpen(false)}
                 onConfirm={applyRefund}
+            />
+
+            <ConfirmDialog
+                open={deleteOpen}
+                title={`Delete order ${orderNumber}?`}
+                description="Are you sure you want to permanently delete this order? All line items, shipping boxes, and administrative records for this order will be removed immediately. This action cannot be undone."
+                confirmLabel={deleting ? "Deleting..." : "Delete Order"}
+                danger
+                onCancel={() => setDeleteOpen(false)}
+                onConfirm={applyDelete}
             />
         </div>
     );

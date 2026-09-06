@@ -3,11 +3,12 @@
 import {useEffect, useState} from "react";
 import Link from "next/link";
 import {useRouter} from "next/navigation";
-import {Eye} from "lucide-react";
+import {Eye, Trash2} from "lucide-react";
 import * as adminApi from "@/lib/admin/api";
 import type {OrderResponse, OrderSortField, SortDirection} from "@/lib/admin/types";
 import {AdminTable, type AdminTableColumn} from "@/components/admin/admin-table";
 import {StatusBadge} from "@/components/admin/status-badge";
+import {ConfirmDialog} from "@/components/admin/confirm-dialog";
 import {type RowAction, RowActions} from "@/components/admin/row-actions";
 import {ApiError} from "@/lib/api";
 import {useNotifications} from "@/components/notifications/notification-store";
@@ -41,9 +42,10 @@ export default function AdminOrdersPage() {
     const [totalPages, setTotalPages] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [deletingOrder, setDeletingOrder] = useState<OrderResponse | null>(null);
     const router = useRouter();
 
-    useEffect(() => {
+    function reload() {
         adminApi
             .listOrders(page, PAGE_SIZE, sortKey, sortDirection)
             .then((result: any) => {
@@ -58,6 +60,10 @@ export default function AdminOrdersPage() {
                 notifications.error("Failed to load orders", message);
             })
             .finally(() => setLoading(false));
+    }
+
+    useEffect(() => {
+        reload();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [page, sortKey, sortDirection]);
 
@@ -75,6 +81,22 @@ export default function AdminOrdersPage() {
     function handlePageChange(nextPage: number) {
         setLoading(true);
         setPage(nextPage);
+    }
+
+    async function handleDeleteOrder() {
+        if (!deletingOrder) return;
+        const targetNumber = deletingOrder.orderNumber;
+        try {
+            await adminApi.deleteOrder(targetNumber);
+            notifications.success("Order deleted", `Order ${targetNumber} has been removed.`);
+            setItems((prev) => prev.filter((o) => o.orderNumber !== targetNumber));
+            setTotalElements((prev) => Math.max(0, prev - 1));
+        } catch (err) {
+            const message = err instanceof ApiError ? err.message : "Failed to delete order.";
+            notifications.error("Failed to delete order", message);
+        } finally {
+            setDeletingOrder(null);
+        }
     }
 
     const columns: AdminTableColumn<OrderResponse>[] = [
@@ -135,6 +157,12 @@ export default function AdminOrdersPage() {
             render: (row) => {
                 const actions: RowAction[] = [
                     {label: "View order", icon: Eye, onSelect: () => router.push(`/admin/orders/${row.orderNumber}`)},
+                    {
+                        label: "Delete order",
+                        icon: Trash2,
+                        tone: "danger",
+                        onSelect: () => setDeletingOrder(row),
+                    },
                 ];
                 return <RowActions actions={actions} label={`Actions for order ${row.orderNumber}`}/>;
             },
@@ -163,6 +191,16 @@ export default function AdminOrdersPage() {
                     pagination={{page, totalPages, totalElements, onPageChange: handlePageChange}}
                 />
             </div>
+
+            <ConfirmDialog
+                open={deletingOrder !== null}
+                title={`Delete order ${deletingOrder?.orderNumber}?`}
+                description="Are you sure you want to delete this order? All items, packaging, and records associated with this order will be permanently removed. This action cannot be undone."
+                confirmLabel="Delete Order"
+                danger
+                onCancel={() => setDeletingOrder(null)}
+                onConfirm={handleDeleteOrder}
+            />
         </div>
     );
 }

@@ -886,6 +886,49 @@ async function refundOrder(req, res) {
     }
 }
 
+async function deleteOrder(req, res) {
+    try {
+        const orderNumber = req.params.orderNumber || req.params.id;
+        const oRes = await db.query(
+            'SELECT id, order_number as "orderNumber" FROM orders WHERE order_number = $1 OR id::text = $1',
+            [orderNumber]
+        );
+        if (oRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Not Found', message: 'Order not found' });
+        }
+
+        const orderId = oRes.rows[0].id;
+        const ordNum = oRes.rows[0].orderNumber;
+
+        await db.query('BEGIN');
+        try {
+            await db.query('DELETE FROM return_requests WHERE order_id = $1', [orderId]);
+        } catch (e) {}
+        try {
+            await db.query('DELETE FROM order_boxes WHERE order_id = $1', [orderId]);
+        } catch (e) {}
+        try {
+            await db.query('DELETE FROM order_items WHERE order_id = $1', [orderId]);
+        } catch (e) {}
+        await db.query('DELETE FROM orders WHERE id = $1', [orderId]);
+        await db.query('COMMIT');
+
+        await logAudit({
+            req,
+            action: 'ORDER_DELETED',
+            entityType: 'ORDER',
+            entityId: ordNum,
+            newValue: { deleted: true }
+        });
+
+        return res.json({ success: true, message: `Order #${ordNum} deleted successfully` });
+    } catch (err) {
+        try { await db.query('ROLLBACK'); } catch (e) {}
+        console.error('[deleteOrder error]:', err);
+        return res.status(500).json({ error: 'Internal Server Error', message: err.message });
+    }
+}
+
 /* --------------------------------------------------------------- Reports */
 
 async function getKpis(req, res) {
@@ -2232,6 +2275,7 @@ module.exports = {
     updateOrderStatus,
     markOrderPaid,
     refundOrder,
+    deleteOrder,
     getOrderBoxes,
     updateOrderBoxes,
     getOrderRates,

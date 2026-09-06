@@ -1380,6 +1380,22 @@ export function refundOrder(orderNumber: string, payload: RefundRequest): Promis
     );
 }
 
+export function deleteOrder(orderNumber: string): Promise<void> {
+    return fetchWithFallback(
+        async () => {
+            await apiFetch<void>(`/api/admin/orders/${encodeURIComponent(orderNumber)}`, {
+                method: "DELETE",
+            });
+            stateOrders = stateOrders.filter(o => o.orderNumber !== orderNumber);
+            persistOrdersState();
+        },
+        () => {
+            stateOrders = stateOrders.filter(o => o.orderNumber !== orderNumber);
+            persistOrdersState();
+        }
+    );
+}
+
 export function getOrderBoxes(orderNumber: string): Promise<OrderBoxResponse[]> {
     return fetchWithFallback(
         () => apiFetch<OrderBoxResponse[]>(`/api/admin/orders/${encodeURIComponent(orderNumber)}/boxes`),
