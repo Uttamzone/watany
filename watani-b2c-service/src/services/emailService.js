@@ -336,8 +336,149 @@ async function dispatchInvoiceEmailForOrder(orderIdOrNumber, db, isDistributorPe
     }
 }
 
+/**
+ * Dispatches an automated notification email to info@wataniandsons.com when an approval request is submitted.
+ */
+async function sendApprovalRequestNotificationEmail({ user, businessDetails = {}, requestedGroup = 'WHOLESALE' }) {
+    const mailTransporter = getTransporter();
+    if (!mailTransporter) {
+        console.warn('[EmailService] Mail transporter unavailable. Skipped approval notification email.');
+        return { success: false, error: 'Transporter unavailable' };
+    }
+
+    const customerName = `${user.firstName || user.first_name || ''} ${user.lastName || user.last_name || ''}`.trim() || user.email;
+    const customerEmail = user.email || 'N/A';
+    const customerPhone = businessDetails.phone || user.phone || 'Not provided';
+    const companyName = businessDetails.companyName || businessDetails.company_name || user.companyName || user.company_name || 'Not provided';
+    const taxId = businessDetails.taxId || businessDetails.tax_id || 'Not provided';
+    const businessLicence = businessDetails.businessLicenceRef || businessDetails.business_licence_ref || 'Not provided';
+    const notes = businessDetails.notes || businessDetails.businessType || '';
+    const adminUrl = process.env.ADMIN_PORTAL_URL || 'https://wataniandsons.ca/admin/customers';
+
+    const groupTitle = (requestedGroup || 'WHOLESALE').toUpperCase() === 'DISTRIBUTOR' ? 'Distributor' : 'Wholesale Buyer';
+
+    const subject = `New Account Approval Request: ${companyName !== 'Not provided' ? companyName : customerName} (${groupTitle}) | Watani & Sons`;
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>New Account Approval Request</title>
+</head>
+<body style="margin: 0; padding: 24px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f6f8f6; color: #022c22;">
+    <table width="100%" border="0" cellspacing="0" cellpadding="0">
+        <tr>
+            <td align="center">
+                <table width="600" border="0" cellspacing="0" cellpadding="0" style="background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06); border: 1px solid #e5e7eb;">
+                    <!-- Header -->
+                    <tr>
+                        <td style="background-color: #022c22; padding: 28px 32px; text-align: left;">
+                            <h1 style="margin: 0; color: #ffffff; font-size: 20px; font-weight: 800; letter-spacing: -0.02em;">
+                                Watani &amp; Sons Corp
+                            </h1>
+                            <p style="margin: 4px 0 0 0; color: #84cc16; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">
+                                Account Approval Request
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Body Content -->
+                    <tr>
+                        <td style="padding: 32px;">
+                            <div style="background-color: #fefce8; border: 1px solid #fef08a; border-radius: 12px; padding: 16px; margin-bottom: 24px;">
+                                <p style="margin: 0; font-size: 14px; font-weight: 700; color: #854d0e;">
+                                    Action Required: New ${groupTitle} Application
+                                </p>
+                                <p style="margin: 4px 0 0 0; font-size: 13px; color: #713f12;">
+                                    A customer has requested an upgrade to their account pricing tier. Please review the submitted business details below in your admin dashboard.
+                                </p>
+                            </div>
+
+                            <table width="100%" cellspacing="0" cellpadding="8" style="font-size: 14px; border-collapse: collapse; margin-bottom: 24px;">
+                                <tr style="background-color: #f8fafc; border-bottom: 1px solid #f1f5f9;">
+                                    <td width="35%" style="font-weight: 700; color: #022c22;">Requested Tier:</td>
+                                    <td style="font-weight: 800; color: #047857; text-transform: uppercase;">${groupTitle}</td>
+                                </tr>
+                                <tr style="border-bottom: 1px solid #f1f5f9;">
+                                    <td style="font-weight: 700; color: #022c22;">Applicant Name:</td>
+                                    <td style="color: #334155;">${customerName}</td>
+                                </tr>
+                                <tr style="background-color: #f8fafc; border-bottom: 1px solid #f1f5f9;">
+                                    <td style="font-weight: 700; color: #022c22;">Email:</td>
+                                    <td style="color: #334155;"><a href="mailto:${customerEmail}" style="color: #047857; text-decoration: underline;">${customerEmail}</a></td>
+                                </tr>
+                                <tr style="border-bottom: 1px solid #f1f5f9;">
+                                    <td style="font-weight: 700; color: #022c22;">Phone:</td>
+                                    <td style="color: #334155;">${customerPhone}</td>
+                                </tr>
+                                <tr style="background-color: #f8fafc; border-bottom: 1px solid #f1f5f9;">
+                                    <td style="font-weight: 700; color: #022c22;">Company / Business:</td>
+                                    <td style="font-weight: 700; color: #022c22;">${companyName}</td>
+                                </tr>
+                                <tr style="border-bottom: 1px solid #f1f5f9;">
+                                    <td style="font-weight: 700; color: #022c22;">Tax / VAT ID:</td>
+                                    <td style="color: #334155;">${taxId}</td>
+                                </tr>
+                                <tr style="background-color: #f8fafc; border-bottom: 1px solid #f1f5f9;">
+                                    <td style="font-weight: 700; color: #022c22;">Business Licence:</td>
+                                    <td style="color: #334155;">${businessLicence}</td>
+                                </tr>
+                                ${notes ? `
+                                <tr style="border-bottom: 1px solid #f1f5f9;">
+                                    <td style="font-weight: 700; color: #022c22;">Additional Notes:</td>
+                                    <td style="color: #334155;">${notes}</td>
+                                </tr>` : ''}
+                                <tr style="background-color: #f8fafc;">
+                                    <td style="font-weight: 700; color: #022c22;">Submission Date:</td>
+                                    <td style="color: #64748b;">${new Date().toLocaleString('en-CA', { timeZone: 'America/Toronto' })}</td>
+                                </tr>
+                            </table>
+
+                            <div style="text-align: center; margin-top: 28px; margin-bottom: 12px;">
+                                <a href="${adminUrl}" style="display: inline-block; background-color: #84cc16; color: #022c22; font-size: 14px; font-weight: 800; text-decoration: none; padding: 14px 32px; border-radius: 9999px; box-shadow: 0 2px 8px rgba(132, 204, 22, 0.3);">
+                                    Open Admin Customers Dashboard &rarr;
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background-color: #f8fafc; padding: 20px 32px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: center;">
+                            <p style="margin: 0 0 4px 0; font-weight: 700; color: #022c22;">Watani &amp; Sons Corp &middot; 300 Greenbank Rd, Ottawa, ON K2H 0B6</p>
+                            <p style="margin: 0;">Automated System Notification &middot; Watani B2C Commerce Engine</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+    `;
+
+    try {
+        const mailOptions = {
+            from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
+            to: WATANI_GROUP_EMAIL,
+            replyTo: customerEmail.includes('@') ? customerEmail : SUPPORT_EMAIL,
+            subject,
+            html: htmlContent
+        };
+
+        const info = await mailTransporter.sendMail(mailOptions);
+        console.log(`[EmailService] Approval request notification dispatched to ${WATANI_GROUP_EMAIL}: messageId = ${info.messageId}`);
+        return { success: true, messageId: info.messageId };
+    } catch (err) {
+        console.error('[EmailService Error] Failed to dispatch approval notification email:', err.message);
+        return { success: false, error: err.message };
+    }
+}
+
 module.exports = {
     sendInvoiceEmail,
     dispatchInvoiceEmailForOrder,
-    generateInvoiceHtml
+    generateInvoiceHtml,
+    sendApprovalRequestNotificationEmail
 };

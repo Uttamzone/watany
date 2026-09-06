@@ -98,8 +98,8 @@ export default async function ProductDetailPage(
         offers: {
             "@type": "Offer",
             priceCurrency: "CAD",
-            price: priceOf(product).toFixed(2),
-            availability: "https://schema.org/InStock",
+            price: (Number(priceOf(product)) || 0).toFixed(2),
+            availability: product.inStock === false ? "https://schema.org/OutOfStock" : "https://schema.org/InStock",
         },
         ...(product.rating !== undefined && product.reviewCount !== undefined
             ? {
@@ -148,10 +148,10 @@ export default async function ProductDetailPage(
                     <ChevronRight className="size-3.5" aria-hidden/>
                     <li>
                         <Link
-                            href={`/categories?category=${product.category}`}
+                            href={`/categories?category=${product.category || ""}`}
                             className="transition-colors hover:text-teal-900"
                         >
-                            {categoryName}
+                            {categoryName || "Catalogue"}
                         </Link>
                     </li>
                     <ChevronRight className="size-3.5" aria-hidden/>
@@ -179,7 +179,7 @@ export default async function ProductDetailPage(
                 <ProductSection
                     title="You might also like"
                     products={related}
-                    seeMoreHref={`/categories?category=${product.category}`}
+                    seeMoreHref={`/categories?category=${product.category || ""}`}
                     headingId="related-products"
                 />
             )}

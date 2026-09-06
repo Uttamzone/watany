@@ -263,7 +263,7 @@ export default function AdminOrderDetailPage({
                             </div>
                             <p className="mt-1 text-[12px] text-muted">
                                 {order.paymentMethod === "E_TRANSFER"
-                                    ? "Customer was asked to e-transfer to Wattany@yahoo.com. Confirm receipt before marking paid."
+                                    ? "Customer was asked to e-transfer to info@wataniandsons.com. Confirm receipt before marking paid."
                                     : order.paymentMethod === "CHEQUE"
                                         ? "Customer was asked to make the cheque payable to Watani & Sons Corp. Confirm receipt before marking paid."
                                         : "For payments confirmed outside the payment provider (e-transfer, cheque, cash)."}

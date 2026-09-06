@@ -30,6 +30,7 @@ type AuthContextValue = {
     logout: () => Promise<void>;
     refreshProfile: () => Promise<void>;
     updateProfile: (payload: authApi.UpdateProfilePayload) => Promise<void>;
+    applyUpgradeRequest: (payload: authApi.UpgradeRequestPayload) => Promise<UserProfile>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -310,9 +311,20 @@ export function AuthProvider({children}: { children: React.ReactNode }) {
         [user, setUserAndStore],
     );
 
+    const applyUpgradeRequest = useCallback(
+        async (payload: authApi.UpgradeRequestPayload) => {
+            const updatedProfile = await authApi.applyUpgradeRequest(payload);
+            if (updatedProfile) {
+                setUserAndStore(updatedProfile);
+            }
+            return updatedProfile;
+        },
+        [setUserAndStore],
+    );
+
     const value = useMemo<AuthContextValue>(
-        () => ({status, user, login, register, loginWithGoogle, logout, refreshProfile, updateProfile}),
-        [status, user, login, register, loginWithGoogle, logout, refreshProfile, updateProfile],
+        () => ({status, user, login, register, loginWithGoogle, logout, refreshProfile, updateProfile, applyUpgradeRequest}),
+        [status, user, login, register, loginWithGoogle, logout, refreshProfile, updateProfile, applyUpgradeRequest],
     );
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -159,6 +159,17 @@ async function register(req, res) {
 
         setRefreshCookies(res, refreshToken);
 
+        if (requestedGroup && requestedGroup !== 'RETAIL') {
+            try {
+                const { sendApprovalRequestNotificationEmail } = require('../services/emailService');
+                sendApprovalRequestNotificationEmail({
+                    user: newUser,
+                    businessDetails: { companyName, taxId, businessLicenceRef, phone },
+                    requestedGroup
+                }).catch(e => console.warn('[Auth Register Email Error]:', e.message));
+            } catch (e) {}
+        }
+
         return res.status(201).json({
             accessToken,
             token: accessToken,
@@ -332,6 +343,17 @@ async function googleLogin(req, res) {
             if (roleRes.rows && roleRes.rows.length > 0) {
                 await db.query('INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)', [user.id, roleRes.rows[0].id]);
             }
+
+            if (requestedGroup && requestedGroup !== 'RETAIL') {
+                try {
+                    const { sendApprovalRequestNotificationEmail } = require('../services/emailService');
+                    sendApprovalRequestNotificationEmail({
+                        user,
+                        businessDetails: {},
+                        requestedGroup
+                    }).catch(e => console.warn('[Google Register Email Error]:', e.message));
+                } catch (e) {}
+            }
         }
 
         const rolesRes = await db.query(`
@@ -384,11 +406,158 @@ async function logout(req, res) {
     return res.json({ success: true, message: 'Logged out successfully' });
 }
 
+async function upgradeRequest(req, res) {
+    try {
+        if (!req.user || !req.user.id) {
+            return res.status(401).json({ error: 'Unauthorized', message: 'Authentication required' });
+        }
+
+        const userId = req.user.id;
+        const { requestedGroup, companyName, taxId, businessLicenceRef, phone, notes } = req.body;
+
+        const targetGroup = (requestedGroup || 'WHOLESALE').toUpperCase();
+        if (targetGroup !== 'WHOLESALE' && targetGroup !== 'DISTRIBUTOR') {
+            return res.status(400).json({ error: 'Bad Request', message: 'Requested tier must be WHOLESALE or DISTRIBUTOR' });
+        }
+
+        if (!companyName || !companyName.trim()) {
+            return res.status(400).json({ error: 'Bad Request', message: 'Company or business name is required' });
+        }
+
+        const { rows } = await db.query(`
+            UPDATE users
+            SET requested_group = $1,
+                approval_status = 'PENDING',
+                company_name = $2,
+                tax_id = COALESCE($3, tax_id),
+                business_licence_ref = COALESCE($4, business_licence_ref),
+                phone = COALESCE($5, phone),
+                updated_at = NOW()
+            WHERE id = $6
+            RETURNING id, email, first_name as "firstName", last_name as "lastName", phone,
+                      pricing_group as "pricingGroup", approval_status as "approvalStatus",
+                      requested_group as "requestedGroup", company_name as "companyName",
+                      tax_id as "taxId", business_licence_ref as "businessLicenceRef";
+        `, [targetGroup, companyName.trim(), taxId ? taxId.trim() : null, businessLicenceRef ? businessLicenceRef.trim() : null, phone ? phone.trim() : null, userId]);
+
+        if (rows.length === 0) {
+            return res.status(404).json({ error: 'Not Found', message: 'User not found' });
+        }
+
+        const updatedUser = rows[0];
+
+        // Fetch user roles
+        const rolesRes = await db.query(`
+            SELECT r.name FROM roles r
+            JOIN user_roles ur ON r.id = ur.role_id
+            WHERE ur.user_id = $1
+        `, [userId]);
+        const userRoles = (rolesRes.rows || []).map(r => r.name).filter(Boolean);
+
+        const userObj = {
+            ...updatedUser,
+            emailVerified: true,
+            roles: userRoles.length > 0 ? userRoles : ['RETAIL_CUSTOMER']
+        };
+
+        const accessToken = generateToken(userObj);
+        const refreshToken = generateRefreshToken(userObj);
+        setRefreshCookies(res, refreshToken);
+
+        // Send email to info@wataniandsons.com
+        try {
+            const { sendApprovalRequestNotificationEmail } = require('../services/emailService');
+            sendApprovalRequestNotificationEmail({
+                user: updatedUser,
+                businessDetails: {
+                    companyName: updatedUser.companyName,
+                    taxId: updatedUser.taxId,
+                    businessLicenceRef: updatedUser.businessLicenceRef,
+                    phone: updatedUser.phone,
+                    notes
+                },
+                requestedGroup: targetGroup
+            }).catch(e => console.warn('[Upgrade Request Email Error]:', e.message));
+        } catch (e) {}
+
+        return res.json({
+            success: true,
+            message: `Your request for ${targetGroup === 'DISTRIBUTOR' ? 'Distributor' : 'Wholesale'} account has been submitted for admin approval.`,
+            user: userObj,
+            token: accessToken,
+            accessToken
+        });
+    } catch (err) {
+        console.error('[upgradeRequest error]:', err);
+        return res.status(500).json({ error: 'Internal Server Error', message: err.message });
+    }
+}
+
+async function updateProfile(req, res) {
+    try {
+        if (!req.user || !req.user.id) {
+            return res.status(401).json({ error: 'Unauthorized', message: 'Authentication required' });
+        }
+
+        const userId = req.user.id;
+        const { firstName, lastName, phone, companyName } = req.body;
+
+        const { rows } = await db.query(`
+            UPDATE users
+            SET first_name = COALESCE($1, first_name),
+                last_name = COALESCE($2, last_name),
+                phone = COALESCE($3, phone),
+                company_name = COALESCE($4, company_name),
+                updated_at = NOW()
+            WHERE id = $5
+            RETURNING id, email, first_name as "firstName", last_name as "lastName", phone,
+                      pricing_group as "pricingGroup", approval_status as "approvalStatus",
+                      requested_group as "requestedGroup", company_name as "companyName",
+                      tax_id as "taxId", business_licence_ref as "businessLicenceRef";
+        `, [firstName, lastName, phone, companyName, userId]);
+
+        if (rows.length === 0) {
+            return res.status(404).json({ error: 'Not Found', message: 'User not found' });
+        }
+
+        const updatedUser = rows[0];
+
+        const rolesRes = await db.query(`
+            SELECT r.name FROM roles r
+            JOIN user_roles ur ON r.id = ur.role_id
+            WHERE ur.user_id = $1
+        `, [userId]);
+        const userRoles = (rolesRes.rows || []).map(r => r.name).filter(Boolean);
+
+        const userObj = {
+            ...updatedUser,
+            emailVerified: true,
+            roles: userRoles.length > 0 ? userRoles : ['RETAIL_CUSTOMER']
+        };
+
+        const accessToken = generateToken(userObj);
+        const refreshToken = generateRefreshToken(userObj);
+        setRefreshCookies(res, refreshToken);
+
+        return res.json({
+            success: true,
+            user: userObj,
+            token: accessToken,
+            accessToken
+        });
+    } catch (err) {
+        console.error('[updateProfile error]:', err);
+        return res.status(500).json({ error: 'Internal Server Error', message: err.message });
+    }
+}
+
 module.exports = {
     login,
     googleLogin,
     register,
     me,
     refreshToken,
-    logout
+    logout,
+    upgradeRequest,
+    updateProfile
 };

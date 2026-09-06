@@ -138,6 +138,13 @@ async function start() {
         await db.initDatabase();
         const { seedInitialAuditLogsIfEmpty } = require('./services/auditService');
         await seedInitialAuditLogsIfEmpty();
+
+        // Schedule periodic cleanup of abandoned Stripe checkout orders (> 2 hours old)
+        const { cleanupExpiredPendingOrders } = require('./controllers/orderController');
+        cleanupExpiredPendingOrders().catch(err => console.warn('[Startup order cleanup error]:', err.message));
+        setInterval(() => {
+            cleanupExpiredPendingOrders().catch(err => console.warn('[Periodic order cleanup error]:', err.message));
+        }, 15 * 60 * 1000);
     } catch (e) {
         console.error('[Database init error]:', e);
     }

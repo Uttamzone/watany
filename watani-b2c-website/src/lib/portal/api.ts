@@ -159,6 +159,18 @@ function getCurrentUserEmail(): string | null {
     return null;
 }
 
+const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+
+function isAbandonedPending(o: any): boolean {
+    if (!o) return false;
+    const isPending = o.status === "PENDING_PAYMENT" || o.paymentStatus === "PENDING";
+    const method = String(o.paymentMethod || o.payment_method || o.paymentProvider || o.payment_provider || "STRIPE").toUpperCase();
+    const isStripe = method === "STRIPE" || method === "";
+    if (!isPending || !isStripe) return false;
+    const orderTime = new Date(o.placedAt || o.placed_at || o.createdAt || o.created_at || 0).getTime();
+    return !isNaN(orderTime) && (Date.now() - orderTime) > TWO_HOURS_MS;
+}
+
 export async function listMyOrders(page = 0, size = 20): Promise<OrderResponse[]> {
     const userEmail = getCurrentUserEmail();
     try {
@@ -178,29 +190,47 @@ export async function listMyOrders(page = 0, size = 20): Promise<OrderResponse[]
             try {
                 const stored = localStorage.getItem("watani_user_orders");
                 if (stored) {
-                    const localOrders: OrderResponse[] = JSON.parse(stored);
+                    let localOrders: OrderResponse[] = JSON.parse(stored);
+                    // Prune any abandoned Stripe checkout orders older than 2 hours
+                    localOrders = localOrders.filter(o => !isAbandonedPending(o));
+                    localStorage.setItem("watani_user_orders", JSON.stringify(localOrders));
+
                     const userLocalOrders = userEmail
                         ? localOrders.filter(o => o.email && o.email.toLowerCase() === userEmail)
                         : [];
                     const localMap = new Map(userLocalOrders.map((o) => [o.orderNumber, o]));
+                    let localModified = false;
+
                     items = items.map(apiItem => {
                         const local = localMap.get(apiItem.orderNumber);
                         if (local) {
+                            const finalStatus = apiItem.status || local.status;
+                            const finalPaymentStatus = apiItem.paymentStatus || local.paymentStatus;
+                            if (local.status !== finalStatus || local.paymentStatus !== finalPaymentStatus) {
+                                local.status = finalStatus;
+                                local.paymentStatus = finalPaymentStatus;
+                                localModified = true;
+                            }
                             return {
                                 ...apiItem,
                                 ...local,
                                 // Prefer API items/shippingAddress over local (stale) data
                                 items: (apiItem.items && apiItem.items.length > 0) ? apiItem.items : (local.items || []),
                                 shippingAddress: apiItem.shippingAddress || local.shippingAddress,
-                                status: local.status || apiItem.status,
-                                paymentStatus: local.paymentStatus || apiItem.paymentStatus,
+                                status: finalStatus,
+                                paymentStatus: finalPaymentStatus,
                             };
                         }
                         return apiItem;
                     });
+
+                    if (localModified) {
+                        localStorage.setItem("watani_user_orders", JSON.stringify(localOrders));
+                    }
+
                     const existingNos = new Set(items.map((o) => o.orderNumber));
                     for (const lo of userLocalOrders) {
-                        if (!existingNos.has(lo.orderNumber)) {
+                        if (!existingNos.has(lo.orderNumber) && !isAbandonedPending(lo)) {
                             items.unshift(lo);
                             existingNos.add(lo.orderNumber);
                         }
@@ -208,14 +238,15 @@ export async function listMyOrders(page = 0, size = 20): Promise<OrderResponse[]
                 }
             } catch {}
         }
-        return items;
+        return items.filter(o => !isAbandonedPending(o));
     } catch {
         if (typeof window !== "undefined") {
             try {
                 const stored = localStorage.getItem("watani_user_orders");
                 if (stored && userEmail) {
                     const parsed: OrderResponse[] = JSON.parse(stored);
-                    return parsed.filter(o => o.email && o.email.toLowerCase() === userEmail);
+                    const valid = parsed.filter(o => !isAbandonedPending(o));
+                    return valid.filter(o => o.email && o.email.toLowerCase() === userEmail);
                 }
             } catch {}
         }
@@ -231,17 +262,23 @@ export async function getMyOrder(orderNumber: string): Promise<OrderResponse> {
             try {
                 const stored = localStorage.getItem("watani_user_orders");
                 if (stored) {
-                    const parsed: OrderResponse[] = JSON.parse(stored);
+                    let parsed: OrderResponse[] = JSON.parse(stored);
+                    parsed = parsed.filter(o => !isAbandonedPending(o));
                     const local = parsed.find((o) => o.orderNumber === orderNumber && (!userEmail || !o.email || o.email.toLowerCase() === userEmail));
                     if (local) {
+                        const finalStatus = apiOrder.status || local.status;
+                        const finalPaymentStatus = apiOrder.paymentStatus || local.paymentStatus;
+                        local.status = finalStatus;
+                        local.paymentStatus = finalPaymentStatus;
+                        localStorage.setItem("watani_user_orders", JSON.stringify(parsed));
                         return {
                             ...apiOrder,
                             ...local,
                             // Prefer API items/shippingAddress over stale local data
                             items: (apiOrder.items && apiOrder.items.length > 0) ? apiOrder.items : (local.items || []),
                             shippingAddress: apiOrder.shippingAddress || local.shippingAddress,
-                            status: local.status || apiOrder.status,
-                            paymentStatus: local.paymentStatus || apiOrder.paymentStatus,
+                            status: finalStatus,
+                            paymentStatus: finalPaymentStatus,
                         };
                     }
                 }
@@ -255,7 +292,7 @@ export async function getMyOrder(orderNumber: string): Promise<OrderResponse> {
                 if (stored) {
                     const parsed: OrderResponse[] = JSON.parse(stored);
                     const match = parsed.find((o) => o.orderNumber === orderNumber && (!userEmail || !o.email || o.email.toLowerCase() === userEmail));
-                    if (match) return match;
+                    if (match && !isAbandonedPending(match)) return match;
                 }
             } catch {}
         }
@@ -264,12 +301,31 @@ export async function getMyOrder(orderNumber: string): Promise<OrderResponse> {
 }
 
 export async function getMyOrderInvoice(orderNumber: string, orderObject?: OrderResponse): Promise<Blob> {
+    // If orderObject is already supplied with details, generate client-side PDF directly
+    if (orderObject && (orderObject.items?.length || orderObject.orderNumber)) {
+        try {
+            const { generateInvoicePdf } = await import("@/lib/invoice-generator");
+            return await generateInvoicePdf(orderObject);
+        } catch (pdfErr) {
+            console.warn("Client invoice PDF generation fallback to API:", pdfErr);
+        }
+    }
+
+    // Try fetching the full order first to generate the formatted PDF
+    try {
+        const order = await getMyOrder(orderNumber);
+        if (order) {
+            const { generateInvoicePdf } = await import("@/lib/invoice-generator");
+            return await generateInvoicePdf(order);
+        }
+    } catch {}
+
     try {
         return await apiFetchBlob(`/api/orders/${encodeURIComponent(orderNumber)}/invoice`);
     } catch (err) {
         if (orderObject) {
             const { generateInvoicePdf } = await import("@/lib/invoice-generator");
-            return generateInvoicePdf(orderObject);
+            return await generateInvoicePdf(orderObject);
         }
         throw err;
     }
@@ -284,3 +340,20 @@ export function requestMyOrderReturn(orderNumber: string, reason: string): Promi
         body: JSON.stringify({reason}),
     });
 }
+
+export async function payPendingOrder(orderNumber: string): Promise<{
+    redirectUrl?: string;
+    alreadyPaid?: boolean;
+    message?: string;
+    paymentRef?: string;
+}> {
+    return apiFetch<{
+        redirectUrl?: string;
+        alreadyPaid?: boolean;
+        message?: string;
+        paymentRef?: string;
+    }>(`/api/orders/${encodeURIComponent(orderNumber)}/pay`, {
+        method: "POST",
+    });
+}
+

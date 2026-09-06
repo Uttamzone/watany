@@ -17,6 +17,8 @@ export type UserProfile = {
     requestedGroup: PricingGroup | null;
     approvalStatus: ApprovalStatus;
     companyName: string | null;
+    taxId?: string | null;
+    businessLicenceRef?: string | null;
     emailVerified: boolean;
     roles: string[];
 };
@@ -62,6 +64,16 @@ export type UpdateProfilePayload = {
     firstName?: string;
     lastName?: string;
     phone?: string;
+    companyName?: string;
+};
+
+export type UpgradeRequestPayload = {
+    requestedGroup: "WHOLESALE" | "DISTRIBUTOR";
+    companyName: string;
+    taxId?: string;
+    businessLicenceRef?: string;
+    phone?: string;
+    notes?: string;
 };
 
 export type ChangePasswordPayload = {
@@ -105,11 +117,20 @@ export async function getMe(): Promise<UserProfile> {
     return res && res.user ? res.user : res;
 }
 
-export function updateProfile(payload: UpdateProfilePayload): Promise<UserProfile> {
-    return apiFetch<UserProfile>("/api/auth/me", {
+export async function updateProfile(payload: UpdateProfilePayload): Promise<UserProfile> {
+    const res = await apiFetch<any>("/api/auth/me", {
         method: "PUT",
         body: JSON.stringify(payload),
     });
+    return res && res.user ? res.user : res;
+}
+
+export async function applyUpgradeRequest(payload: UpgradeRequestPayload): Promise<UserProfile> {
+    const res = await apiFetch<any>("/api/auth/upgrade-request", {
+        method: "POST",
+        body: JSON.stringify(payload),
+    });
+    return res && res.user ? res.user : res;
 }
 
 export function changePassword(payload: ChangePasswordPayload): Promise<void> {

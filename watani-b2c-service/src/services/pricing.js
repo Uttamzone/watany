@@ -43,9 +43,14 @@ async function resolvePrice(variantId, group = 'RETAIL', quantity = 1) {
                 appliedGroup: 'RETAIL',
                 yourGroup: buyerGroup,
                 fellBackToRetail: false,
+                retailPrice: 0,
+                wholesalePrice: 0,
+                minQuantity: 1,
+                minimumOrderQuantity: 1,
                 unlockMessage: null,
                 unlockAtQuantity: null,
-                unlockUnitPrice: null
+                unlockUnitPrice: null,
+                tiers: []
             }
         };
     }
@@ -95,6 +100,11 @@ async function resolvePrice(variantId, group = 'RETAIL', quantity = 1) {
         : selectedTier;
     const moq = baseTier && baseTier.min_quantity ? baseTier.min_quantity : 1;
 
+    const retailTier = tiers.find(t => t.pricing_group === 'RETAIL');
+    const wholesaleTier = tiers.find(t => t.pricing_group === 'WHOLESALE');
+    const resolvedRetailPrice = retailTier ? parseFloat(retailTier.unit_price) : unitPrice;
+    const resolvedWholesalePrice = wholesaleTier ? parseFloat(wholesaleTier.unit_price) : Math.round(resolvedRetailPrice * 0.8 * 100) / 100;
+
     return {
         price: unitPrice,
         priceMajor: formattedPrice.major,
@@ -106,6 +116,8 @@ async function resolvePrice(variantId, group = 'RETAIL', quantity = 1) {
             appliedGroup: selectedTier.pricing_group,
             yourGroup: buyerGroup,
             fellBackToRetail,
+            retailPrice: resolvedRetailPrice,
+            wholesalePrice: resolvedWholesalePrice,
             minQuantity: moq,
             minimumOrderQuantity: moq,
             unlockMessage,

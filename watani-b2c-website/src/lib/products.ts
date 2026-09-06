@@ -105,27 +105,37 @@ function toProduct(dto: ApiProduct): Product {
     const priceMajor = String(dto.priceMajor || priceParts[0] || '0');
     const priceMinor = String(dto.priceMinor || priceParts[1] || '00');
     const moq = dto.minimumOrderQuantity ?? dto.minQuantity ?? dto.pricing?.minimumOrderQuantity ?? dto.pricing?.minQuantity ?? 1;
+    const parsedRetail = parseFloat(String((dto as any).retailPrice ?? (dto.pricing as any)?.retailPrice ?? priceNum));
+    const retailPrice = isNaN(parsedRetail) ? priceNum : parsedRetail;
+    const parsedWholesale = parseFloat(String((dto as any).wholesalePrice ?? (dto.pricing as any)?.wholesalePrice ?? ""));
+    const wholesalePrice = isNaN(parsedWholesale) ? (Math.round(retailPrice * 0.8 * 100) / 100) : parsedWholesale;
+    const parsedRating = dto.rating != null ? (typeof dto.rating === "number" ? dto.rating : parseFloat(String(dto.rating))) : undefined;
+    const rating = parsedRating != null && !isNaN(parsedRating) ? parsedRating : undefined;
+    const parsedReviews = dto.reviewCount != null ? parseInt(String(dto.reviewCount), 10) : undefined;
+    const reviewCount = parsedReviews != null && !isNaN(parsedReviews) ? parsedReviews : undefined;
 
     return {
         id: String(dto.id),
         defaultVariantId: dto.defaultVariantId ?? (typeof dto.id === "number" ? dto.id : parseInt(String(dto.id), 10) || 1),
         slug: dto.slug || `product-${dto.id}`,
-        name: dto.name || 'Palestinian Product',
-        fullName: dto.fullName || dto.name || 'Authentic Palestinian Product',
+        name: dto.name || "Palestinian Product",
+        fullName: dto.fullName || dto.name || "Authentic Palestinian Product",
         subtitle: dto.subtitle ?? "",
-        unit: dto.unit || '1 Unit',
+        unit: dto.unit || "1 Unit",
         priceMajor,
         priceMinor,
         compareAtMajor: dto.compareAtMajor ?? undefined,
         compareAtMinor: dto.compareAtMinor ?? undefined,
+        retailPrice,
+        wholesalePrice,
         minQuantity: moq,
         minimumOrderQuantity: moq,
         image: dto.image ?? "",
         gallery: dto.gallery,
         category: dto.category,
         badge: dto.badge ?? undefined,
-        rating: dto.rating ?? undefined,
-        reviewCount: dto.reviewCount ?? undefined,
+        rating,
+        reviewCount,
         sku: dto.sku,
         description: dto.description ?? "",
         longDescription: dto.longDescription ?? undefined,
@@ -133,7 +143,7 @@ function toProduct(dto: ApiProduct): Product {
         region: dto.region ?? undefined,
         material: dto.material ?? undefined,
         color: dto.color ?? undefined,
-        inStock: dto.inStock,
+        inStock: Boolean(dto.inStock),
         pricing: toPricingRelation(dto.pricing),
     };
 }

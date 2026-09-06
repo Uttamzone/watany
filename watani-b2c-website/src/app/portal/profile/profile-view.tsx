@@ -1,11 +1,12 @@
 "use client";
 
 import {useEffect, useState} from "react";
-import {Mail, MapPin, Pencil, Phone, Plus, ShieldCheck, Star, Tag, Trash2, User, X} from "lucide-react";
+import {Building2, CheckCircle2, Clock, Mail, MapPin, Pencil, Phone, Plus, ShieldAlert, ShieldCheck, Sparkles, Star, Tag, Trash2, User, X} from "lucide-react";
 import {useAuth} from "@/components/auth/auth-store";
 import {useNotifications} from "@/components/notifications/notification-store";
 import {ApiError} from "@/lib/api";
 import {changePassword, getUserInitials, updateProfile} from "@/lib/auth";
+import {UpgradeAccountModal} from "@/components/auth/upgrade-account-modal";
 import {
     createMyAddress,
     deleteMyAddress,
@@ -60,6 +61,8 @@ export function ProfileView() {
             </div>
 
             <ProfileDetailsSection displayName={displayName}/>
+
+            <B2BProgramSection/>
 
             <SavedAddressesSection/>
 
@@ -301,9 +304,204 @@ function ProfileDetailsSection({displayName}: { displayName: string }) {
                             <span className="text-[14px] font-semibold text-teal-950">{user.companyName}</span>
                         </Row>
                     )}
+                    {user.taxId && (
+                        <Row icon={Tag} label="Tax ID / BN">
+                            <span className="text-[14px] font-semibold text-teal-950">{user.taxId}</span>
+                        </Row>
+                    )}
+                    {user.businessLicenceRef && (
+                        <Row icon={Tag} label="Licence Ref">
+                            <span className="text-[14px] font-semibold text-teal-950">{user.businessLicenceRef}</span>
+                        </Row>
+                    )}
                 </div>
             )}
         </div>
+    );
+}
+
+function B2BProgramSection() {
+    const {user} = useAuth();
+    const [modalOpen, setModalOpen] = useState(false);
+    const [targetGroup, setTargetGroup] = useState<"WHOLESALE" | "DISTRIBUTOR">("WHOLESALE");
+
+    if (!user) return null;
+
+    const isDistributor = user.pricingGroup === "DISTRIBUTOR";
+    const isWholesale = user.pricingGroup === "WHOLESALE";
+    const isPending = user.approvalStatus === "PENDING";
+    const isRejected = user.approvalStatus === "REJECTED";
+
+    function openModal(group: "WHOLESALE" | "DISTRIBUTOR") {
+        setTargetGroup(group);
+        setModalOpen(true);
+    }
+
+    return (
+        <>
+            <div className="mt-6 max-w-2xl rounded-2xl bg-white p-6 shadow-card sm:p-8">
+                <SectionHeading
+                    icon={Building2}
+                    title="Wholesale & Distributor Program"
+                    action={
+                        !isDistributor && !isPending && (
+                            <button
+                                type="button"
+                                onClick={() => openModal(isWholesale ? "DISTRIBUTOR" : "WHOLESALE")}
+                                className="flex items-center gap-1.5 rounded-full bg-teal-950 px-4 py-2 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
+                            >
+                                <Sparkles className="size-3.5 text-lime-400" aria-hidden />
+                                {isWholesale ? "Apply for Distributor" : "Apply to Upgrade"}
+                            </button>
+                        )
+                    }
+                />
+
+                {isDistributor ? (
+                    <div className="mt-4 rounded-xl border border-teal-950/10 bg-teal-950/[0.03] p-4">
+                        <div className="flex items-center gap-2 text-[14px] font-bold text-teal-950">
+                            <CheckCircle2 className="size-4.5 text-emerald-600" aria-hidden />
+                            Distributor Account Active
+                        </div>
+                        <p className="mt-1 text-[13px] text-muted leading-relaxed">
+                            You have full access to top-tier distributor pricing and offline payment terms (Cheque, e-Transfer, and Stripe) at checkout.
+                        </p>
+                        {user.companyName && (
+                            <div className="mt-2.5 text-[12.5px] text-teal-950">
+                                <span className="font-semibold text-muted">Registered Company:</span> {user.companyName}
+                            </div>
+                        )}
+                    </div>
+                ) : isWholesale && !isPending ? (
+                    <div className="mt-4 space-y-3">
+                        <div className="rounded-xl border border-teal-950/10 bg-teal-950/[0.03] p-4">
+                            <div className="flex items-center gap-2 text-[14px] font-bold text-teal-950">
+                                <CheckCircle2 className="size-4.5 text-emerald-600" aria-hidden />
+                                Wholesale Account Active
+                            </div>
+                            <p className="mt-1 text-[13px] text-muted leading-relaxed">
+                                You receive exclusive volume wholesale pricing. If you qualify as a regional volume distributor and wish to place orders with offline payment terms (Cheque / e-Transfer), you can apply for Distributor status.
+                            </p>
+                            <div className="mt-3">
+                                <button
+                                    type="button"
+                                    onClick={() => openModal("DISTRIBUTOR")}
+                                    className="inline-flex items-center gap-1.5 text-[13px] font-bold text-teal-900 underline hover:text-teal-950"
+                                >
+                                    Apply to become a Distributor &rarr;
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                ) : isPending ? (
+                    <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4.5">
+                        <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2 text-[14px] font-bold text-amber-950">
+                                <Clock className="size-4.5 text-amber-600 animate-pulse" aria-hidden />
+                                Application Under Review
+                            </div>
+                            <span className="rounded-full bg-amber-200/80 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-amber-900">
+                                Pending Admin Approval
+                            </span>
+                        </div>
+                        <p className="mt-1.5 text-[13px] text-amber-900/90 leading-relaxed">
+                            Your application to upgrade to <strong className="font-bold">{user.requestedGroup === "DISTRIBUTOR" ? "Distributor" : "Wholesale"}</strong> tier has been submitted and is currently being reviewed by Watani administration.
+                        </p>
+
+                        <div className="mt-3.5 grid gap-2 rounded-lg bg-white/80 p-3 text-[12.5px] sm:grid-cols-2">
+                            <div>
+                                <span className="font-semibold text-muted">Company Name:</span>{" "}
+                                <span className="font-bold text-teal-950">{user.companyName || "—"}</span>
+                            </div>
+                            <div>
+                                <span className="font-semibold text-muted">Requested Tier:</span>{" "}
+                                <span className="font-bold text-teal-950">{user.requestedGroup === "DISTRIBUTOR" ? "Distributor" : "Wholesale"}</span>
+                            </div>
+                            <div>
+                                <span className="font-semibold text-muted">Tax ID / BN:</span>{" "}
+                                <span className="font-bold text-teal-950">{user.taxId || "—"}</span>
+                            </div>
+                            <div>
+                                <span className="font-semibold text-muted">Business Licence:</span>{" "}
+                                <span className="font-bold text-teal-950">{user.businessLicenceRef || "—"}</span>
+                            </div>
+                        </div>
+
+                        <div className="mt-3 flex items-center justify-between text-[12px] text-amber-800">
+                            <span>Notification sent to: info@wataniandsons.com</span>
+                            <button
+                                type="button"
+                                onClick={() => openModal((user.requestedGroup as any) || "WHOLESALE")}
+                                className="font-bold underline hover:text-amber-950"
+                            >
+                                Edit Application Details
+                            </button>
+                        </div>
+                    </div>
+                ) : isRejected ? (
+                    <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4">
+                        <div className="flex items-center gap-2 text-[14px] font-bold text-red-950">
+                            <ShieldAlert className="size-4.5 text-red-600" aria-hidden />
+                            Previous Application Update
+                        </div>
+                        <p className="mt-1 text-[13px] text-red-900/80 leading-relaxed">
+                            Your previous business tier application could not be approved at this time. If your business information has changed or you have additional documentation, you may re-apply below.
+                        </p>
+                        <div className="mt-3">
+                            <button
+                                type="button"
+                                onClick={() => openModal("WHOLESALE")}
+                                className="rounded-full bg-red-950 px-4 py-1.5 text-[12px] font-bold text-white transition-opacity hover:opacity-90"
+                            >
+                                Re-apply for Business Account
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="mt-4 space-y-4">
+                        <p className="text-[13px] leading-relaxed text-muted">
+                            Are you a retailer, grocery store, or food distributor? Upgrade your account to unlock volume wholesale pricing, bulk ordering, and specialized payment terms (e-Transfer and Cheque for distributors).
+                        </p>
+
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="rounded-xl border border-black/10 bg-soft-control p-4 transition-colors hover:border-teal-950/20">
+                                <div className="text-[14px] font-bold text-teal-950">Wholesale Tier</div>
+                                <p className="mt-1 text-[12px] text-muted leading-relaxed">
+                                    For grocers, restaurants, and retail stores buying by the case or box.
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => openModal("WHOLESALE")}
+                                    className="mt-3 inline-flex items-center gap-1 text-[12px] font-bold text-teal-900 hover:text-teal-950"
+                                >
+                                    Apply as Wholesaler &rarr;
+                                </button>
+                            </div>
+
+                            <div className="rounded-xl border border-black/10 bg-soft-control p-4 transition-colors hover:border-teal-950/20">
+                                <div className="text-[14px] font-bold text-teal-950">Distributor Tier</div>
+                                <p className="mt-1 text-[12px] text-muted leading-relaxed">
+                                    For regional distributors. Unlocks Cheque and e-Transfer terms without upfront payment.
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => openModal("DISTRIBUTOR")}
+                                    className="mt-3 inline-flex items-center gap-1 text-[12px] font-bold text-teal-900 hover:text-teal-950"
+                                >
+                                    Apply as Distributor &rarr;
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            <UpgradeAccountModal
+                open={modalOpen}
+                onClose={() => setModalOpen(false)}
+                defaultGroup={targetGroup}
+            />
+        </>
     );
 }
 

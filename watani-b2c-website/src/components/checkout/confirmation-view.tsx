@@ -12,6 +12,7 @@ import {
     downloadInvoice,
     getOrder,
     lookupOrder,
+    stashUserOrder,
     type Order,
     readGuestOrderEmail,
 } from "@/lib/checkout";
@@ -80,6 +81,7 @@ export function ConfirmationView({orderNumber}: { orderNumber: string }) {
                 if (!cancelled) {
                     setEmail(stashed);
                     setOrder(found);
+                    stashUserOrder(found);
                     clearGuestOrderEmail(orderNumber);
                 }
             })
@@ -103,7 +105,10 @@ export function ConfirmationView({orderNumber}: { orderNumber: string }) {
         let cancelled = false;
         getOrder(orderNumber)
             .then((found) => {
-                if (!cancelled) setOrder(found);
+                if (!cancelled) {
+                    setOrder(found);
+                    stashUserOrder(found);
+                }
             })
             .catch(() => {
                 // The order may have been placed as a guest before signing in, in
@@ -161,6 +166,7 @@ export function ConfirmationView({orderNumber}: { orderNumber: string }) {
                         ? await getOrder(orderNumber)
                         : await lookupOrder(orderNumber, order.email);
                 setOrder(refreshed);
+                stashUserOrder(refreshed);
             } catch {
                 // Keep the last known state; the next tick may succeed.
             } finally {
@@ -206,7 +212,9 @@ export function ConfirmationView({orderNumber}: { orderNumber: string }) {
             try {
                 // Setting the order is what dismisses the email prompt - `needsEmail`
                 // is derived from whether an order has been resolved.
-                setOrder(await lookupOrder(orderNumber, email));
+                const found = await lookupOrder(orderNumber, email);
+                setOrder(found);
+                stashUserOrder(found);
             } catch {
                 const message =
                     "We could not find that order. Check the email you used to order.";
@@ -296,7 +304,7 @@ export function ConfirmationView({orderNumber}: { orderNumber: string }) {
                                 </p>
                                 {order.paymentMethod === "E_TRANSFER" && (
                                     <p className="mt-2">
-                                        Send your e-transfer to: <strong>Wattany@yahoo.com</strong>.
+                                        Send your e-transfer to: <strong>info@wataniandsons.com</strong>.
                                     </p>
                                 )}
                                 {order.paymentMethod === "CHEQUE" && (

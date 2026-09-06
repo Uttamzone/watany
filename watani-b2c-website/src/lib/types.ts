@@ -39,6 +39,8 @@ export type PricingRelation = {
     appliedGroup: PricingGroup;
     yourGroup: PricingGroup;
     fellBackToRetail: boolean;
+    retailPrice?: number;
+    wholesalePrice?: number;
     minQuantity?: number;
     minimumOrderQuantity?: number;
     unlockMessage?: string;
@@ -75,6 +77,9 @@ export type Product = {
     reviewCount?: number;
     sku: string;
     description: string;
+    /** Retail & wholesale price references */
+    retailPrice?: number;
+    wholesalePrice?: number;
     /** Minimum order quantity required or configured for this product */
     minQuantity?: number;
     minimumOrderQuantity?: number;
@@ -150,9 +155,19 @@ export function formatCad(value: number): string {
     return `$${value.toFixed(2)}`;
 }
 
+/** Formats price numbers/strings cleanly into $45 or $45.50 format without throwing on strings/NaN/null */
+export function safeFormatPrice(val: any): string {
+    if (val === null || val === undefined || val === "") return "0";
+    const num = typeof val === "number" ? val : parseFloat(String(val).replace(/[^0-9.-]/g, ""));
+    if (isNaN(num)) return "0";
+    return num % 1 === 0 ? String(num) : num.toFixed(2);
+}
+
 /** Shipping weight in the easiest unit: grams below 1kg, kg above (no trailing `.0`). */
-export function formatWeight(grams: number): string {
-    if (grams < 1000) return `${grams} g`;
-    const kg = grams / 1000;
+export function formatWeight(grams: number | null | undefined): string {
+    if (grams == null || isNaN(Number(grams))) return "-";
+    const num = Number(grams);
+    if (num < 1000) return `${num} g`;
+    const kg = num / 1000;
     return `${Number.isInteger(kg) ? kg : kg.toFixed(2)} kg`;
 }

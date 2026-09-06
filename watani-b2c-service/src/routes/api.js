@@ -26,6 +26,8 @@ mapRoute('post', ['/v1/auth/login', '/auth/login'], auth.login);
 mapRoute('post', ['/v1/auth/google', '/auth/google'], auth.googleLogin);
 mapRoute('post', ['/v1/auth/register', '/auth/register'], auth.register);
 mapRoute('get', ['/v1/auth/me', '/auth/me'], verifyToken, auth.me);
+mapRoute('put', ['/v1/auth/me', '/auth/me'], verifyToken, auth.updateProfile);
+mapRoute('post', ['/v1/auth/upgrade-request', '/auth/upgrade-request'], verifyToken, auth.upgradeRequest);
 mapRoute('post', ['/v1/auth/refresh', '/auth/refresh'], auth.refreshToken);
 mapRoute('post', ['/v1/auth/logout', '/auth/logout'], auth.logout);
 
@@ -47,8 +49,11 @@ mapRoute('post', ['/v1/checkout', '/checkout', '/v1/checkout/create-intent', '/c
 
 /* Orders Routes */
 mapRoute('get', ['/v1/orders', '/orders'], verifyToken, order.getOrders);
+mapRoute('get', ['/v1/orders/:orderNumber/invoice', '/orders/:orderNumber/invoice'], optionalAuth, order.getInvoice);
+mapRoute('post', ['/v1/orders/:orderNumber/invoice/lookup', '/orders/:orderNumber/invoice/lookup', '/v1/orders/invoice/lookup', '/orders/invoice/lookup'], order.lookupInvoice);
 mapRoute('get', ['/v1/orders/:orderNumber', '/orders/:orderNumber'], optionalAuth, order.getOrderByNumber);
 mapRoute('post', ['/v1/orders/lookup', '/orders/lookup'], order.lookupOrder);
+mapRoute('post', ['/v1/orders/:orderNumber/pay', '/orders/:orderNumber/pay'], optionalAuth, order.payOrder);
 mapRoute('post', ['/v1/orders/:orderNumber/cancel', '/orders/:orderNumber/cancel'], verifyToken, order.cancelOrder);
 mapRoute('post', ['/v1/orders/:orderNumber/return', '/orders/:orderNumber/return'], verifyToken, order.returnOrder);
 

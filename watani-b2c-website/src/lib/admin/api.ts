@@ -1505,6 +1505,8 @@ export function listCustomers(
     size = 25,
     sort: CustomerSortField = "firstName",
     direction: SortDirection = "asc",
+    status?: string,
+    group?: string,
 ): Promise<PageResponse<CustomerResponse>> {
     const params = new URLSearchParams({
         email,
@@ -1513,6 +1515,8 @@ export function listCustomers(
         sort,
         direction,
     });
+    if (status) params.set("status", status);
+    if (group) params.set("group", group);
     return fetchWithFallback(
         async () => {
             const res = await apiFetch<any>(`/api/admin/customers?${params.toString()}`);
@@ -1528,9 +1532,15 @@ export function listCustomers(
             return res;
         },
         () => {
-            const filtered = email.trim()
+            let filtered = email.trim()
                 ? stateCustomers.filter(c => c.email.toLowerCase().includes(email.toLowerCase()) || (c.companyName && c.companyName.toLowerCase().includes(email.toLowerCase())))
                 : stateCustomers;
+            if (status) {
+                filtered = filtered.filter(c => c.approvalStatus === status);
+            }
+            if (group) {
+                filtered = filtered.filter(c => c.pricingGroup === group);
+            }
             return {
                 content: filtered,
                 page,
@@ -1562,7 +1572,7 @@ export function decideApproval(
             const match = stateCustomers.find(c => c.id === userId);
             if (match) {
                 match.approvalStatus = payload.approve ? "APPROVED" : "REJECTED";
-                match.pricingGroup = payload.approve ? (match.requestedGroup ?? "WHOLESALE") : "RETAIL";
+                match.pricingGroup = payload.approve ? (payload.targetGroup || match.requestedGroup || "WHOLESALE") : "RETAIL";
                 return match;
             }
             return stateCustomers[0];

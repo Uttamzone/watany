@@ -85,8 +85,8 @@ async function getProducts(req, res) {
         // Fetch variants & images for each product
         const content = [];
         for (const p of productRows) {
-            const varRes = await db.query('SELECT id, sku, unit, stock_quantity as "stockQuantity" FROM product_variants WHERE product_id = $1 AND active = TRUE LIMIT 1', [p.id]);
-            const defaultVariant = varRes.rows[0] || { id: p.id, sku: `SKU-${p.id}`, unit: 'unit', stockQuantity: 10 };
+            const varRes = await db.query('SELECT id, sku, unit, stock_quantity as "stockQuantity", active FROM product_variants WHERE product_id = $1 ORDER BY active DESC, id ASC LIMIT 1', [p.id]);
+            const defaultVariant = varRes.rows[0] || { id: p.id, sku: `SKU-${p.id}`, unit: 'unit', stockQuantity: 0, active: false };
 
             const imgRes = await db.query('SELECT url FROM product_images WHERE product_id = $1 ORDER BY display_order ASC LIMIT 1', [p.id]);
             const image = imgRes.rows[0] ? imgRes.rows[0].url : '/logo/watany-logo.png';
@@ -120,9 +120,11 @@ async function getProducts(req, res) {
                 region: p.region,
                 material: p.material,
                 color: p.color,
-                inStock: (defaultVariant.stockQuantity !== null && defaultVariant.stockQuantity !== undefined) ? defaultVariant.stockQuantity > 0 : true,
+                inStock: Boolean((defaultVariant.stockQuantity || 0) > 0 && defaultVariant.active !== false),
                 minQuantity: priceInfo.pricingRelation?.minQuantity || 1,
                 minimumOrderQuantity: priceInfo.pricingRelation?.minimumOrderQuantity || 1,
+                retailPrice: priceInfo.pricingRelation?.retailPrice,
+                wholesalePrice: priceInfo.pricingRelation?.wholesalePrice,
                 pricing: priceInfo.pricingRelation
             });
         }
@@ -184,14 +186,17 @@ async function getProductBySlug(req, res) {
         const varRes = await db.query(`
             SELECT id, sku, unit, stock_quantity as "stockQuantity", low_stock_threshold as "lowStockThreshold",
                    backorder_allowed as "backorderAllowed", weight_grams as "weightGrams",
-                   length_cm as "lengthCm", width_cm as "widthCm", height_cm as "heightCm"
+                   length_cm as "lengthCm", width_cm as "widthCm", height_cm as "heightCm",
+                   active
             FROM product_variants
-            WHERE product_id = $1 AND active = TRUE
-            ORDER BY id ASC;
+            WHERE product_id = $1
+            ORDER BY active DESC, id ASC;
         `, [p.id]);
 
-        const variants = varRes.rows;
-        const defaultVariant = variants[0] || { id: p.id, sku: `SKU-${p.id}`, unit: 'unit', stockQuantity: 10 };
+        const allVariants = varRes.rows;
+        const activeVariants = allVariants.filter(v => v.active !== false);
+        const variants = activeVariants.length > 0 ? activeVariants : allVariants;
+        const defaultVariant = variants[0] || { id: p.id, sku: `SKU-${p.id}`, unit: 'unit', stockQuantity: 0, active: false };
 
         const imgRes = await db.query(`
             SELECT url FROM product_images WHERE product_id = $1 ORDER BY display_order ASC;
@@ -232,9 +237,11 @@ async function getProductBySlug(req, res) {
             region: p.region,
             material: p.material,
             color: p.color,
-            inStock: defaultVariant.stockQuantity > 0,
+            inStock: Boolean((defaultVariant.stockQuantity || 0) > 0 && defaultVariant.active !== false),
             minQuantity: priceInfo.pricingRelation?.minQuantity || 1,
             minimumOrderQuantity: priceInfo.pricingRelation?.minimumOrderQuantity || 1,
+            retailPrice: priceInfo.pricingRelation?.retailPrice,
+            wholesalePrice: priceInfo.pricingRelation?.wholesalePrice,
             pricing: priceInfo.pricingRelation,
             specifications: {
                 weightGrams: defaultVariant.weightGrams,

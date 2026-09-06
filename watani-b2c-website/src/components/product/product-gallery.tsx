@@ -22,7 +22,11 @@ const SWIPE_RATIO = 0.2;
  * swipe, keyboard, or click. Galleries longer than four collapse into a "+N" tile.
  */
 export function ProductGallery({product}: { product: Product }) {
-    const images = product.gallery?.length ? product.gallery : [productImageSrc(product.image)];
+    const rawImages = product.gallery?.length ? product.gallery : [productImageSrc(product.image, product.slug)];
+    const validImages = rawImages
+        .map((img) => (typeof img === "string" ? productImageSrc(img, product.slug) : ""))
+        .filter((src) => src.length > 0);
+    const images = validImages.length > 0 ? validImages : [productImageSrc(product.image, product.slug)];
     // `direction` drives which side a slide enters from; it is only read during a transition.
     const [[activeIndex, direction], setSlide] = useState<[number, number]>([0, 0]);
     const stageRef = useRef<HTMLDivElement>(null);
@@ -33,6 +37,7 @@ export function ProductGallery({product}: { product: Product }) {
 
     const goTo = useCallback(
         (next: number) => {
+            if (images.length <= 1) return;
             // Wrap so the arrows stay usable at both ends of the gallery.
             const target = (next + images.length) % images.length;
             setSlide(([current]) => [target, target === current ? 0 : target > current ? 1 : -1]);
@@ -135,7 +140,7 @@ export function ProductGallery({product}: { product: Product }) {
                         <div className="absolute inset-x-0 bottom-4 z-20 flex justify-center gap-1.5">
                             {images.map((image, index) => (
                                 <button
-                                    key={image}
+                                    key={`${image}-${index}`}
                                     type="button"
                                     onClick={() => goTo(index)}
                                     aria-label={`Go to ${labelFor(index).toLowerCase()}`}
@@ -155,7 +160,7 @@ export function ProductGallery({product}: { product: Product }) {
                     {visibleThumbnails.map((image, index) => {
                         const selected = index === activeIndex;
                         return (
-                            <li key={image}>
+                            <li key={`${image}-${index}`}>
                                 <button
                                     type="button"
                                     onClick={() => goTo(index)}

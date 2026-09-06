@@ -29,6 +29,7 @@ type AdminTableProps<T> = {
     columns: AdminTableColumn<T>[];
     rows: T[];
     rowKey: (row: T) => string | number;
+    rowClassName?: (row: T) => string | undefined;
     loading?: boolean;
     emptyMessage?: string;
     pagination?: Pagination;
@@ -40,6 +41,7 @@ export function AdminTable<T>({
                                   columns,
                                   rows,
                                   rowKey,
+                                  rowClassName,
                                   loading,
                                   emptyMessage = "No records found.",
                                   pagination,
@@ -86,7 +88,7 @@ export function AdminTable<T>({
                     <tbody>
                     {rows.map((row) => (
                         <tr key={rowKey(row)}
-                            className="border-b border-black/5 last:border-0 hover:bg-soft-control/50">
+                            className={`border-b border-black/5 last:border-0 hover:bg-soft-control/50 ${rowClassName?.(row) ?? ""}`}>
                             {columns.map((column) => (
                                 <td key={column.key} className={`px-5 py-3.5 align-middle ${column.className ?? ""}`}>
                                     {column.render(row)}

@@ -828,7 +828,7 @@ export function CheckoutView() {
 
                                 {paymentMethod === "E_TRANSFER" && (
                                     <p className="mt-3 rounded-[14px] bg-white p-4 text-[13px] leading-relaxed text-teal-950">
-                                        Send your e-transfer to: <strong>Wattany@yahoo.com</strong>.
+                                        Send your e-transfer to: <strong>info@wataniandsons.com</strong>.
                                         Your order will be placed immediately and approved once Watani administration confirms receipt.
                                     </p>
                                 )}

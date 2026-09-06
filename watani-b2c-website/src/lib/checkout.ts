@@ -518,15 +518,30 @@ export async function getShippingQuotes(
     ];
 }
 
+const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+
+export function isAbandonedPendingOrder(o: any): boolean {
+    if (!o) return false;
+    const isPending = o.status === "PENDING_PAYMENT" || o.paymentStatus === "PENDING";
+    const method = String(o.paymentMethod || o.payment_method || o.paymentProvider || o.payment_provider || "STRIPE").toUpperCase();
+    const isStripe = method === "STRIPE" || method === "";
+    if (!isPending || !isStripe) return false;
+    const orderTime = new Date(o.placedAt || o.placed_at || o.createdAt || o.created_at || 0).getTime();
+    return !isNaN(orderTime) && (Date.now() - orderTime) > TWO_HOURS_MS;
+}
+
 export function stashUserOrder(order: Order) {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !order) return;
     try {
         registerOrderForAdmin(order);
         const stored = localStorage.getItem("watani_user_orders");
-        const orders: any[] = stored ? JSON.parse(stored) : [];
+        let orders: any[] = stored ? JSON.parse(stored) : [];
+        // Prune any abandoned Stripe checkout orders older than 2 hours
+        orders = orders.filter((o) => !isAbandonedPendingOrder(o));
+
         const existingIndex = orders.findIndex((o) => o.orderNumber === order.orderNumber);
         if (existingIndex >= 0) {
-            orders[existingIndex] = order;
+            orders[existingIndex] = { ...orders[existingIndex], ...order };
         } else {
             orders.unshift(order);
         }
@@ -599,6 +614,16 @@ export async function downloadInvoice(
     guestEmail?: string,
     orderObject?: any,
 ): Promise<Blob> {
+    // If orderObject is available, immediately generate the PDF using the robust client-side generator
+    if (orderObject && (orderObject.items || orderObject.orderNumber || orderObject.order_number)) {
+        try {
+            const { generateInvoicePdf } = await import("@/lib/invoice-generator");
+            return await generateInvoicePdf(orderObject);
+        } catch (pdfErr) {
+            console.warn("Client invoice PDF generation fallback to API:", pdfErr);
+        }
+    }
+
     try {
         const token = getAccessToken();
         const useGuestPath = !token || guestEmail !== undefined;
@@ -624,16 +649,45 @@ export async function downloadInvoice(
         });
 
         if (response.ok) {
-            return await response.blob();
+            const contentType = response.headers.get("content-type") || "";
+            if (contentType.includes("application/pdf")) {
+                return await response.blob();
+            }
+            if (contentType.includes("application/json")) {
+                const orderData = await response.json();
+                const { generateInvoicePdf } = await import("@/lib/invoice-generator");
+                return await generateInvoicePdf(orderData);
+            }
         }
     } catch {}
 
-    // Fallback client-side PDF invoice generation
-    if (orderObject) {
+    // If orderObject was not provided or server endpoint returned non-PDF, fetch the order and generate PDF
+    try {
+        const resolvedOrder = guestEmail
+            ? await lookupOrder(orderNumber, guestEmail)
+            : await getOrder(orderNumber);
+        if (resolvedOrder) {
+            const { generateInvoicePdf } = await import("@/lib/invoice-generator");
+            return await generateInvoicePdf(resolvedOrder);
+        }
+    } catch {}
+
+    // Final fallback: generate minimal invoice if we at least know the order number
+    try {
         const { generateInvoicePdf } = await import("@/lib/invoice-generator");
-        return generateInvoicePdf(orderObject);
-    }
+        return await generateInvoicePdf(orderObject || { orderNumber });
+    } catch {}
+
     throw new ApiError(`Could not download the invoice for ${orderNumber}`, 500);
+}
+
+export async function payPendingOrder(orderNumber: string): Promise<{
+    redirectUrl?: string;
+    alreadyPaid?: boolean;
+    message?: string;
+}> {
+    const { payPendingOrder } = await import("@/lib/portal/api");
+    return payPendingOrder(orderNumber);
 }
 
 /** Canadian provinces and territories, for the address form's region select. */

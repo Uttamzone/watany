@@ -73,13 +73,13 @@ async function listCustomers(req, res) {
 async function decideApproval(req, res) {
     try {
         const { id } = req.params;
-        const { approve } = req.body;
+        const { approve, targetGroup: explicitGroup } = req.body;
         const isApproved = approve === true || approve === 'true';
 
         const { rows: existing } = await db.query(`SELECT requested_group FROM users WHERE id = $1;`, [id]);
         if (existing.length === 0) return res.status(404).json({ error: 'Not Found', message: 'Customer not found' });
 
-        const requestedGroup = existing[0].requested_group || 'WHOLESALE';
+        const requestedGroup = explicitGroup || existing[0].requested_group || 'WHOLESALE';
         const newGroup = isApproved ? requestedGroup : 'RETAIL';
         const newStatus = isApproved ? 'APPROVED' : 'REJECTED';
 
@@ -90,6 +90,7 @@ async function decideApproval(req, res) {
             RETURNING id, email, first_name as "firstName", last_name as "lastName", phone,
                       pricing_group as "pricingGroup", approval_status as "approvalStatus",
                       requested_group as "requestedGroup", company_name as "companyName",
+                      tax_id as "taxId", business_licence_ref as "businessLicenceRef",
                       COALESCE(enabled, TRUE) as enabled;
         `, [newGroup, newStatus, id]);
 
@@ -210,6 +211,7 @@ async function pendingApprovals(req, res) {
             SELECT id, email, first_name as "firstName", last_name as "lastName", phone,
                    pricing_group as "pricingGroup", approval_status as "approvalStatus",
                    requested_group as "requestedGroup", company_name as "companyName",
+                   tax_id as "taxId", business_licence_ref as "businessLicenceRef",
                    COALESCE(enabled, TRUE) as enabled,
                    created_at as "createdAt"
             FROM users

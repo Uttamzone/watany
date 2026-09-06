@@ -324,6 +324,8 @@ export type OrderLine = {
     image: string;
     quantity: number;
     unitPrice: number;
+    retailPrice?: number;
+    wholesalePrice?: number;
     lineTotal: number;
     appliedGroup: PricingGroup;
     requestedGroup: PricingGroup;
@@ -470,6 +472,8 @@ export type CustomerResponse = {
     lastName: string | null;
     phone: string | null;
     companyName: string | null;
+    taxId?: string | null;
+    businessLicenceRef?: string | null;
     pricingGroup: PricingGroup;
     requestedGroup: PricingGroup | null;
     approvalStatus: ApprovalStatus;
@@ -528,6 +532,7 @@ export type StaffSortField = "firstName" | "lastName" | "email" | "createdAt";
 
 export type ApprovalDecisionRequest = {
     approve: boolean;
+    targetGroup?: PricingGroup;
 };
 
 export type ApprovalStatusRequest = {

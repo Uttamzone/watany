@@ -8,7 +8,7 @@ import {useCart} from "@/components/cart/cart-store";
 import {useWishlist} from "@/components/wishlist/wishlist-store";
 import {useAuth} from "@/components/auth/auth-store";
 import {Price} from "./price";
-import type {Product} from "@/lib/types";
+import {type Product, safeFormatPrice} from "@/lib/types";
 import {categories} from "@/lib/catalogue";
 import {sanitizeRichText} from "@/lib/rich-text";
 
@@ -75,11 +75,11 @@ export function ProductPurchasePanel({product}: { product: Product }) {
             <p className="mt-2 text-[15px] text-muted">{product.subtitle}</p>
 
             {/* Rating shown only when the catalogue supplies one (design.md §8). */}
-            {product.rating !== undefined && (
+            {product.rating !== undefined && product.rating !== null && (
                 <p className="mt-4 flex items-center gap-2 text-[14px]">
                     <Star className="size-4 fill-gold text-gold" aria-hidden/>
                     <span className="font-bold text-teal-950">
-                        {product.rating.toFixed(1)} Rating
+                        {(typeof product.rating === "number" ? product.rating : parseFloat(String(product.rating || 5))).toFixed(1)} Rating
                     </span>
                     {/* Plain anchor, not `Link` - needs native scroll + hashchange to tell ProductTabs to open Reviews. */}
                     {product.reviewCount !== undefined && (
@@ -96,20 +96,29 @@ export function ProductPurchasePanel({product}: { product: Product }) {
             <div className="mt-5">
                 <Price product={product} size="detail"/>
                 <p className="mt-1 text-[13px] font-semibold text-muted">
-                    CAD · {product.unit}
+                    CAD · {product.unit || "unit"}
                 </p>
             </div>
 
-            {/* Prominent Minimum Order Quantity (MOQ) callout */}
-            <div className="mt-3.5 flex items-center gap-2.5 rounded-xl border border-teal-950/10 bg-teal-950/[0.03] px-3.5 py-2.5 text-[13px] text-teal-950">
-                <PackageCheck className="size-4.5 shrink-0 text-teal-800" aria-hidden />
-                <div>
-                    <span className="font-medium text-muted">Minimum Order Quantity (MOQ): </span>
-                    <strong className="font-bold text-teal-950">
-                        {moq} {moq === 1 ? (product.unit || "unit") : `${moq} units`}
-                    </strong>
-                </div>
-            </div>
+            {/* Exact requested specifications format */}
+            {(() => {
+                const retailPrice = product.retailPrice ?? product.pricing?.retailPrice ?? (parseFloat(product.priceMajor || "0") + parseFloat(product.priceMinor || "0") / 100);
+                const wholesalePrice = product.wholesalePrice ?? product.pricing?.wholesalePrice ?? (
+                    product.pricing?.tiers?.find(t => t.pricingGroup === "WHOLESALE")?.unitPrice ?? 
+                    Math.round((typeof retailPrice === "number" ? retailPrice : parseFloat(String(retailPrice || 0))) * 0.8 * 100) / 100
+                );
+
+                return (
+                    <div className="mt-3.5 rounded-2xl border border-teal-950/10 bg-teal-950/[0.03] p-4 text-[14px]">
+                        <div className="space-y-1 font-semibold text-teal-950">
+                            <div>Moq <span className="font-bold text-teal-950">{moq}</span></div>
+                            <div>Unit <span className="font-bold text-teal-950">{product.unit || "unit"}</span></div>
+                            <div>Price ( retail) :<span className="font-bold text-teal-950">${safeFormatPrice(retailPrice)}</span></div>
+                            <div>Price (wholesale) :<span className="font-bold text-teal-800">${safeFormatPrice(wholesalePrice)}</span></div>
+                        </div>
+                    </div>
+                );
+            })()}
 
             {/* Volume pricing tier breaks if available */}
             {product.pricing?.tiers && product.pricing.tiers.length > 1 && (
@@ -123,7 +132,7 @@ export function ProductPurchasePanel({product}: { product: Product }) {
                             >
                                 <span>{t.minQuantity}+ units:</span>
                                 <span className="font-bold text-teal-700">
-                                    ${(typeof t.unitPrice === "number" ? t.unitPrice : parseFloat(String(t.unitPrice || "0"))).toFixed(2)} CAD
+                                    ${safeFormatPrice(t.unitPrice)} CAD
                                 </span>
                             </span>
                         ))}
@@ -163,20 +172,26 @@ export function ProductPurchasePanel({product}: { product: Product }) {
                     type="button"
                     disabled={pending || outOfStock}
                     onClick={() => void handleAddToCart()}
-                    className="inline-flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-lime-500 px-6 text-[15px] font-bold text-teal-950 transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-px disabled:opacity-60 disabled:hover:translate-y-0 sm:flex-none sm:w-[196px]"
+                    className={`inline-flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-full px-6 text-[15px] font-bold transition-transform duration-150 sm:flex-none sm:w-[196px] ${
+                        outOfStock
+                            ? "bg-black/10 text-muted cursor-not-allowed"
+                            : "bg-lime-500 text-teal-950 hover:-translate-y-0.5 active:translate-y-px disabled:opacity-60 disabled:hover:translate-y-0"
+                    }`}
                 >
                     <ShoppingCart className="size-[18px]" aria-hidden />
-                    Add to cart
+                    {outOfStock ? "Out of stock" : "Add to cart"}
                 </button>
 
-                <button
-                    type="button"
-                    disabled={pending || outOfStock}
-                    onClick={() => void buyNow()}
-                    className="inline-flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-full border border-teal-950 bg-white px-5 text-[15px] font-bold text-teal-950 transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-px disabled:opacity-60 disabled:hover:translate-y-0 sm:flex-none"
-                >
-                    Buy now
-                </button>
+                {!outOfStock && (
+                    <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => void buyNow()}
+                        className="inline-flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-full border border-teal-950 bg-white px-5 text-[15px] font-bold text-teal-950 transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-px disabled:opacity-60 disabled:hover:translate-y-0 sm:flex-none"
+                    >
+                        Buy now
+                    </button>
+                )}
             </div>
 
             <div className="mt-5 flex flex-wrap gap-6 text-[13px] font-bold">
@@ -200,14 +215,14 @@ export function ProductPurchasePanel({product}: { product: Product }) {
             {/* Three attribute icons - design.md §8. */}
             <ul className="flex flex-wrap gap-6">
                 {[
-                    {icon: Leaf, label: product.category},
-                    {icon: Package, label: product.unit},
+                    {icon: Leaf, label: categoryName || product.category || "Authentic Product"},
+                    {icon: Package, label: product.unit || "unit"},
                     {icon: Truck, label: "Ships to Canada & USA"},
-                ].map((attribute) => {
+                ].map((attribute, idx) => {
                     const Icon = attribute.icon;
                     return (
                         <li
-                            key={attribute.label}
+                            key={attribute.label || idx}
                             className="flex items-center gap-2 text-[13px] font-semibold text-teal-950"
                         >
                             <span className="grid size-9 place-items-center rounded-full bg-soft-control">
@@ -238,18 +253,22 @@ export function ProductPurchasePanel({product}: { product: Product }) {
                     <dt className="font-bold text-teal-950">Category:</dt>
                     <dd>
                         <Link
-                            href={`/categories?category=${product.category}`}
+                            href={`/categories?category=${product.category || ""}`}
                             className="text-muted underline underline-offset-4 transition-colors hover:text-teal-900"
                         >
-                            {categoryName}
+                            {categoryName || "General"}
                         </Link>
-                        <span className="text-muted">, </span>
-                        <Link
-                            href={`/categories?category=${product.category}`}
-                            className="text-muted underline underline-offset-4 transition-colors hover:text-teal-900"
-                        >
-                            {categoryName.toLowerCase()} {product.unit}
-                        </Link>
+                        {categoryName && (
+                            <>
+                                <span className="text-muted">, </span>
+                                <Link
+                                    href={`/categories?category=${product.category || ""}`}
+                                    className="text-muted underline underline-offset-4 transition-colors hover:text-teal-900"
+                                >
+                                    {String(categoryName).toLowerCase()} {product.unit || ""}
+                                </Link>
+                            </>
+                        )}
                     </dd>
                 </div>
             </dl>

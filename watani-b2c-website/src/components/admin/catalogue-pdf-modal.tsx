@@ -18,6 +18,7 @@ type FieldKey =
     | "stock"
     | "tax"
     | "price"
+    | "priceWholesaleBase"
     | "priceRetail"
     | "priceWholesale"
     | "priceDistributor";
@@ -42,11 +43,12 @@ const FIELD_DEFS: FieldDef[] = [
     {key: "product", label: "Product", defaultOn: true, role: "title"},
     {key: "image", label: "Image", defaultOn: true, role: "meta"},
     {key: "category", label: "Category", defaultOn: true, role: "chip"},
-    {key: "minQuantity", label: "Min. Order (MOQ)", defaultOn: true, role: "chip"},
-    {key: "price", label: "Price (retail)", defaultOn: true, role: "price"},
-    {key: "tax", label: "Tax", defaultOn: true, role: "chip"},
+    {key: "minQuantity", label: "Moq", defaultOn: true, role: "chip"},
+    {key: "unit", label: "Unit", defaultOn: true, role: "meta"},
+    {key: "price", label: "Price ( retail)", defaultOn: true, role: "price"},
+    {key: "priceWholesaleBase", label: "Price (wholesale)", defaultOn: true, role: "price"},
+    {key: "tax", label: "Tax", defaultOn: false, role: "chip"},
     {key: "sku", label: "SKU", defaultOn: false, role: "meta", variantLevel: true},
-    {key: "unit", label: "Unit", defaultOn: false, role: "meta", variantLevel: true},
     {key: "stock", label: "Stock", defaultOn: false, role: "meta", variantLevel: true},
     {key: "priceRetail", label: "Retail price (all tiers)", defaultOn: false, role: "price", variantLevel: true},
     {key: "priceWholesale", label: "Wholesale price (all tiers)", defaultOn: false, role: "price", variantLevel: true},
@@ -233,13 +235,14 @@ export function CataloguePdfModal({open, onClose, products, title}: CataloguePdf
                 const variant = row.variant ?? row.product.variants?.[0];
                 const retailTier = variant?.priceTiers?.find((t) => t.pricingGroup === "RETAIL") ?? variant?.priceTiers?.[0];
                 const moq = retailTier?.minQuantity ?? (row.product as any).minimumOrderQuantity ?? (row.product as any).minQuantity ?? 1;
-                const unit = variant?.unit || (row.product as any).unit || "unit";
-                return `MOQ: ${moq} ${unit}`;
+                return `${moq}`;
             }
             case "sku":
                 return row.variant?.sku ?? "-";
-            case "unit":
-                return row.variant?.unit ?? "-";
+            case "unit": {
+                const variant = row.variant ?? row.product.variants?.[0];
+                return variant?.unit || (row.product as any).unit || "unit";
+            }
             case "stock":
                 return row.variant ? String(row.variant.stockQuantity) : "-";
             case "tax":
@@ -247,6 +250,12 @@ export function CataloguePdfModal({open, onClose, products, title}: CataloguePdf
             case "price": {
                 const price = baseTierPrice(row.variant, "RETAIL");
                 return price != null ? money(price) : "-";
+            }
+            case "priceWholesaleBase": {
+                const wsPrice = baseTierPrice(row.variant, "WHOLESALE");
+                if (wsPrice != null) return money(wsPrice);
+                const retPrice = baseTierPrice(row.variant, "RETAIL");
+                return retPrice != null ? money(Math.round(retPrice * 0.8 * 100) / 100) : "-";
             }
             case "priceRetail":
                 return allTiersLabel(row.variant, "RETAIL");

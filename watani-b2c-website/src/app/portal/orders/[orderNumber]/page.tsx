@@ -3,7 +3,7 @@
 import {use, useEffect, useState} from "react";
 import Link from "next/link";
 import Image from "next/image";
-import {ArrowLeft, ClipboardList, FileText, MapPin, Star, XCircle} from "lucide-react";
+import {ArrowLeft, ClipboardList, Clock, CreditCard, FileText, MapPin, Star, XCircle} from "lucide-react";
 import * as portalApi from "@/lib/portal/api";
 import type {OrderResponse} from "@/lib/admin/types";
 import {StatusBadge} from "@/components/admin/status-badge";
@@ -14,6 +14,12 @@ import {productImageSrc} from "@/lib/products";
 
 function money(value: number, currency: string) {
     return new Intl.NumberFormat("en-CA", {style: "currency", currency}).format(value);
+}
+
+function toPrice(val: any): string {
+    const num = typeof val === "number" ? val : parseFloat(String(val || 0));
+    if (isNaN(num)) return "0";
+    return num % 1 === 0 ? String(num) : num.toFixed(2);
 }
 
 export default function PortalOrderDetailPage({
@@ -28,6 +34,7 @@ export default function PortalOrderDetailPage({
     const [downloadingInvoice, setDownloadingInvoice] = useState(false);
     const [cancelling, setCancelling] = useState(false);
     const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+    const [completingPayment, setCompletingPayment] = useState(false);
 
     useEffect(() => {
         portalApi
@@ -40,6 +47,28 @@ export default function PortalOrderDetailPage({
             });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [orderNumber]);
+
+    async function handleCompletePayment() {
+        if (!order) return;
+        setCompletingPayment(true);
+        try {
+            const res = await portalApi.payPendingOrder(order.orderNumber);
+            if (res.alreadyPaid) {
+                notifications.success("Order Paid", "This order has already been paid.");
+                portalApi.getMyOrder(order.orderNumber).then(setOrder);
+                return;
+            }
+            if (res.redirectUrl) {
+                window.location.href = res.redirectUrl;
+            } else {
+                notifications.error("Payment error", "Could not start payment session. Please try again.");
+            }
+        } catch (err: any) {
+            notifications.error("Payment Error", err?.message || "Failed to start payment. Please try again.");
+        } finally {
+            setCompletingPayment(false);
+        }
+    }
 
     async function handleDownloadInvoice() {
         if (!order) return;
@@ -85,6 +114,8 @@ export default function PortalOrderDetailPage({
         );
     }
 
+    const isPendingPayment = order.status === "PENDING_PAYMENT" || order.paymentStatus === "PENDING";
+
     return (
         <div>
             <Link
@@ -106,6 +137,17 @@ export default function PortalOrderDetailPage({
 
                 <div className="flex flex-wrap items-center gap-2">
                     <StatusBadge status={order.paymentStatus}/>
+                    {isPendingPayment && (
+                        <button
+                            type="button"
+                            onClick={handleCompletePayment}
+                            disabled={completingPayment}
+                            className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-4 py-2 text-[13px] font-bold text-white shadow-xs transition-all hover:bg-emerald-700 disabled:opacity-60"
+                        >
+                            <CreditCard className="size-3.5" aria-hidden />
+                            {completingPayment ? "Connecting…" : "Complete Payment"}
+                        </button>
+                    )}
                     <button
                         type="button"
                         onClick={handleDownloadInvoice}
@@ -128,6 +170,27 @@ export default function PortalOrderDetailPage({
                 </div>
             </div>
 
+            {isPendingPayment && (
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-950">
+                    <div className="flex items-center gap-3">
+                        <Clock className="size-5 shrink-0 text-amber-700" />
+                        <div>
+                            <p className="font-bold text-[14px]">Payment is pending for this order</p>
+                            <p className="text-[12px] text-amber-900/80">Please complete payment within 2 hours to confirm your order.</p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={handleCompletePayment}
+                        disabled={completingPayment}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-5 py-2 text-[13px] font-bold text-white shadow-xs transition-all hover:bg-emerald-700 disabled:opacity-60"
+                    >
+                        <CreditCard className="size-4" aria-hidden />
+                        {completingPayment ? "Redirecting to Stripe…" : "Complete Payment Now"}
+                    </button>
+                </div>
+            )}
+
             {order.reviewToken && (
                 <Link
                     href={`/review/${encodeURIComponent(order.orderNumber)}?token=${encodeURIComponent(order.reviewToken)}`}
@@ -146,39 +209,39 @@ export default function PortalOrderDetailPage({
                 <div className="space-y-6 lg:col-span-2">
                     <div className="rounded-2xl bg-white p-4 shadow-card sm:p-5">
                         <h2 className="text-[15px] font-bold text-teal-950">Items ({order.items?.length ?? 0})</h2>
-                        {/* Below sm the qty/price move under the product name - kept on one
-                row they leave the name barely any width, and a truncated
-                product name is the least useful thing to drop. */}
                         <ul className="mt-3 divide-y divide-black/5">
-                            {(order.items ?? []).map((line, idx) => (
-                                <li key={line.id ? `${line.id}-${idx}` : `${line.sku || "item"}-${idx}`} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                                    <div className="relative size-14 shrink-0 overflow-hidden rounded-xl bg-canvas border border-black/5">
-                                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                                        <img
-                                            src={productImageSrc(line.image || (line as any).productImage || (line as any).imageUrl)}
-                                            alt={line.productName}
-                                            className="size-full object-cover"
-                                            onError={(e) => {
-                                                (e.currentTarget as HTMLImageElement).src = "/images/placeholder.png";
-                                            }}
-                                        />
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                        <p className="font-semibold text-teal-950 sm:truncate">{line.productName}</p>
-                                        <p className="text-[12px] text-muted">{line.sku} · {line.unit}</p>
-                                        <p className="mt-1 text-[13px] text-muted sm:hidden">
-                                            ×{line.quantity} ·{" "}
-                                            <span className="font-semibold text-teal-950">
-                        {money(line.lineTotal, order.currency)}
-                      </span>
+                            {(order.items ?? []).map((line, idx) => {
+                                const retailPrice = line.retailPrice ?? (line.unitPrice || 0);
+                                const wholesalePrice = line.wholesalePrice ?? (Math.round(retailPrice * 0.8 * 100) / 100);
+                                return (
+                                    <li key={line.id ? `${line.id}-${idx}` : `${line.sku || "item"}-${idx}`} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                                        <div className="relative size-14 shrink-0 overflow-hidden rounded-xl bg-canvas border border-black/5">
+                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                            <img
+                                                src={productImageSrc(line.image || (line as any).productImage || (line as any).imageUrl)}
+                                                alt={line.productName}
+                                                className="size-full object-cover"
+                                                onError={(e) => {
+                                                    (e.currentTarget as HTMLImageElement).src = "/images/placeholder.png";
+                                                }}
+                                            />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="font-semibold text-teal-950 sm:truncate">{line.productName}</p>
+                                            <div className="mt-1 space-y-0.5 text-[12px] text-muted">
+                                                <p>Moq <strong className="text-teal-950">{line.quantity || 1}</strong></p>
+                                                <p>Unit <strong className="text-teal-950">{line.unit || "unit"}</strong></p>
+                                                <p>Price ( retail) :<strong className="text-teal-950">${toPrice(retailPrice)}</strong></p>
+                                                <p>Price (wholesale) :<strong className="text-teal-800">${toPrice(wholesalePrice)}</strong></p>
+                                            </div>
+                                        </div>
+                                        <p className="hidden shrink-0 text-[13px] text-muted sm:block">×{line.quantity}</p>
+                                        <p className="hidden w-24 shrink-0 text-right font-semibold text-teal-950 sm:block">
+                                            {money(line.lineTotal, order.currency)}
                                         </p>
-                                    </div>
-                                    <p className="hidden shrink-0 text-[13px] text-muted sm:block">×{line.quantity}</p>
-                                    <p className="hidden w-24 shrink-0 text-right font-semibold text-teal-950 sm:block">
-                                        {money(line.lineTotal, order.currency)}
-                                    </p>
-                                </li>
-                            ))}
+                                    </li>
+                                );
+                            })}
                         </ul>
                     </div>
 
