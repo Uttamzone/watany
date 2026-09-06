@@ -237,7 +237,7 @@ export function SiteHeader() {
           {/* Sticky shadow is a CSS transition - Framer cannot interpolate a
               `var(--token)` shadow value. */}
           <header
-            className={`flex h-[70px] items-center gap-3 rounded-[18px] bg-teal-950 px-4 text-white transition-shadow duration-[240ms] lg:h-[84px] lg:gap-5 lg:px-6 ${
+            className={`flex h-[66px] sm:h-[70px] items-center gap-2 sm:gap-3 rounded-[18px] bg-teal-950 px-3 sm:px-4 text-white transition-shadow duration-[240ms] lg:h-[84px] lg:gap-5 lg:px-6 ${
               stuck ? "shadow-header" : "shadow-none"
             }`}
           >
@@ -245,9 +245,9 @@ export function SiteHeader() {
               type="button"
               onClick={() => setDrawerOpen(true)}
               aria-label="Open menu"
-              className="grid size-10 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 md:hidden shrink-0"
+              className="grid size-9 sm:size-10 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 md:hidden shrink-0"
             >
-              <Menu className="size-5" aria-hidden />
+              <Menu className="size-4 sm:size-5" aria-hidden />
             </button>
 
             <Link href="/" className="shrink-0" aria-label="Watany - Palestinian Products - home">
@@ -258,7 +258,7 @@ export function SiteHeader() {
                 height={373}
                 priority
                 /* Near-square lockup (435x373) - sized by width to keep the wordmark legible. */
-                className="h-auto w-[70px] lg:w-[86px]"
+                className="h-auto w-[58px] sm:w-[70px] lg:w-[86px]"
               />
             </Link>
 
@@ -345,7 +345,7 @@ export function SiteHeader() {
               )}
             </form>
 
-            <div className="ml-auto flex shrink-0 items-center gap-3 md:ml-0">
+            <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-3 md:ml-0">
 
               <CurrencySelector />
 
@@ -357,9 +357,9 @@ export function SiteHeader() {
                     ? `Cart, ${count} ${count === 1 ? "item" : "items"}`
                     : "Cart"
                 }
-                className="relative grid size-11 place-items-center rounded-full bg-white text-teal-950 transition-transform hover:-translate-y-0.5"
+                className="relative grid size-9 sm:size-11 shrink-0 place-items-center rounded-full bg-white text-teal-950 transition-transform hover:-translate-y-0.5"
               >
-                <ShoppingCart className="size-5" aria-hidden />
+                <ShoppingCart className="size-4 sm:size-5" aria-hidden />
                 <AnimatePresence>
                   {hydrated && count > 0 && (
                     <motion.span
@@ -367,7 +367,7 @@ export function SiteHeader() {
                       initial={reduceMotion ? false : { scale: 0.6 }}
                       animate={{ scale: 1 }}
                       transition={motionTokens.spring}
-                      className="absolute -right-1 -top-1 grid min-w-5 place-items-center rounded-full bg-coral px-1.5 text-[11px] font-bold text-white"
+                      className="absolute -right-1 -top-1 grid min-w-4 sm:min-w-5 h-4 sm:h-5 place-items-center rounded-full bg-coral px-1 text-[10px] sm:text-[11px] font-bold text-white"
                     >
                       {count}
                     </motion.span>
@@ -375,7 +375,7 @@ export function SiteHeader() {
                 </AnimatePresence>
               </button>
 
-              <div className="relative block">
+              <div className="relative block shrink-0">
                 {status === "authenticated" && user ? (
                   <>
                     <button
@@ -384,7 +384,7 @@ export function SiteHeader() {
                       aria-haspopup="menu"
                       aria-expanded={accountOpen}
                       aria-label={`Account menu - signed in as ${user.firstName ?? user.email}`}
-                      className="grid size-11 shrink-0 place-items-center rounded-full bg-lime-500 text-[15px] font-bold text-teal-950 ring-2 ring-gold"
+                      className="grid size-9 sm:size-11 shrink-0 place-items-center rounded-full bg-lime-500 text-[13px] sm:text-[15px] font-bold text-teal-950 ring-2 ring-gold"
                     >
                       {getUserInitials(user)}
                     </button>
@@ -394,14 +394,14 @@ export function SiteHeader() {
                   <Link
                     href={`/login?next=${encodeURIComponent(pathname)}`}
                     aria-label="Log in"
-                    className="grid size-11 shrink-0 place-items-center rounded-full bg-white/10 text-white ring-2 ring-white/40 transition-colors hover:bg-white/20"
+                    className="grid size-9 sm:size-11 shrink-0 place-items-center rounded-full bg-white/10 text-white ring-2 ring-white/40 transition-colors hover:bg-white/20"
                   >
-                    <User className="size-5" aria-hidden />
+                    <User className="size-4 sm:size-5" aria-hidden />
                   </Link>
                 ) : (
                   <span
                     aria-label="Loading account"
-                    className="block size-11 shrink-0 animate-pulse rounded-full bg-white/10 ring-2 ring-white/20"
+                    className="block size-9 sm:size-11 shrink-0 animate-pulse rounded-full bg-white/10 ring-2 ring-white/20"
                   />
                 )}
               </div>
@@ -567,10 +567,10 @@ function NavDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
                     <Link
                       href={`/categories?category=${category.slug}`}
                       onClick={onClose}
-                      className="flex items-center justify-between rounded-xl px-3 py-3 text-[15px] font-semibold text-teal-950 transition-colors hover:bg-white"
+                      className="flex items-center justify-between gap-3 rounded-xl px-3 py-3 text-[15px] font-semibold text-teal-950 transition-colors hover:bg-white"
                     >
-                      {category.name}
-                      <span className="text-xs font-medium text-muted">
+                      <span className="truncate">{category.name}</span>
+                      <span className="text-xs font-medium text-muted shrink-0">
                         {category.tagline}
                       </span>
                     </Link>

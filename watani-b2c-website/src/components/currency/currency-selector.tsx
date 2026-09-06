@@ -60,12 +60,12 @@ export function CurrencySelector() {
                 aria-haspopup="menu"
                 aria-expanded={open}
                 aria-label={`Currency - ${CURRENCY_NAMES[currency] ?? currency}`}
-                className="flex items-center gap-1.5 rounded-full bg-teal-950/10 hover:bg-teal-950/20 dark:bg-white/10 dark:hover:bg-white/20 px-3 py-2 text-xs font-extrabold text-teal-950 dark:text-white border border-teal-950/15 dark:border-white/25 shadow-xs transition-all cursor-pointer"
+                className="flex shrink-0 items-center gap-1 sm:gap-1.5 rounded-full bg-teal-950/10 hover:bg-teal-950/20 dark:bg-white/10 dark:hover:bg-white/20 px-2 sm:px-3 py-1.5 sm:py-2 text-[11px] sm:text-xs font-extrabold text-teal-950 dark:text-white border border-teal-950/15 dark:border-white/25 shadow-xs transition-all cursor-pointer"
             >
-                <Globe className="size-3.5 opacity-80" />
+                <Globe className="size-3 sm:size-3.5 opacity-80 shrink-0" />
                 <span className="font-bold">{currency}</span>
-                <span className="text-[11px] opacity-75 font-mono">({currentSymbol})</span>
-                <ChevronDown className={`size-3.5 opacity-70 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+                <span className="hidden sm:inline text-[11px] opacity-75 font-mono">({currentSymbol})</span>
+                <ChevronDown className={`size-3 sm:size-3.5 opacity-70 shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
             </button>
             <AnimatePresence>
                 {open && (

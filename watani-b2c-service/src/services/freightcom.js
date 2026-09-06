@@ -318,10 +318,7 @@ async function getFreightcomQuotes(destination = {}, subtotal = 0, items = []) {
         baseParcelCost = 27.50;
     }
 
-    // Free standard shipping for retail orders over $150 within ON and QC
-    const standardCost = (subtotal > 150 && (prov === 'ON' || prov === 'QC') && country === 'CA')
-        ? 0
-        : Math.round(baseParcelCost * 100) / 100;
+    const standardCost = Math.round(baseParcelCost * 100) / 100;
     const expressCost = Math.round((baseParcelCost + 15.00) * 100) / 100;
 
     return [

@@ -737,8 +737,8 @@ export function CheckoutView() {
                             Shipping method
                         </h2>
 
-                        <div className="mt-2 flex items-baseline justify-between gap-4">
-                            <p className="text-[14px] text-muted">
+                        <div className="mt-2 flex items-baseline justify-between gap-3 sm:gap-4">
+                            <p className="min-w-0 flex-1 break-words text-[13px] sm:text-[14px] text-muted">
                                 Delivering to {address.line1}, {address.city}, {address.region}{" "}
                                 {address.postalCode}
                             </p>
@@ -751,41 +751,41 @@ export function CheckoutView() {
                             </button>
                         </div>
 
-                        <ul className="mt-5 max-h-[19rem] space-y-3 overflow-y-auto overscroll-contain pr-1">
+                        <ul className="mt-5 max-h-[22rem] space-y-3 overflow-y-auto overscroll-contain pr-1">
                             {quotes.map((quote) => (
                                 <li key={quote.serviceCode}>
                                     <label
-                                        className="flex cursor-pointer items-center gap-3 rounded-[14px] border border-black/10 bg-white p-4">
+                                        className="flex cursor-pointer items-start gap-2.5 sm:gap-3 rounded-[14px] border border-black/10 bg-white p-3.5 sm:p-4 transition-all hover:border-black/20">
                                         <input
                                             type="radio"
                                             name="shipping"
                                             value={quote.serviceCode}
                                             checked={serviceCode === quote.serviceCode}
                                             onChange={() => setServiceCode(quote.serviceCode)}
-                                            className="size-4"
+                                            className="size-4 shrink-0 mt-0.5"
                                         />
-                                        <span className="flex-1">
-                                            <span className="flex flex-wrap items-center gap-2">
-                                                <span className="block text-[15px] font-bold text-teal-950">
+                                        <span className="min-w-0 flex-1">
+                                            <span className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                                                <span className="block text-[14px] sm:text-[15px] font-bold text-teal-950 break-words">
                                                     {quote.serviceName}
                                                 </span>
                                                 {quote.packagingType === "PALLET" && (
-                                                    <span className="inline-block rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-extrabold text-amber-900 uppercase tracking-wide">
+                                                    <span className="inline-block shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] sm:text-[11px] font-extrabold text-amber-900 uppercase tracking-wide">
                                                         40&quot;&times;48&quot; Pallet Freight
                                                     </span>
                                                 )}
                                             </span>
-                                            <span className="block text-[13px] text-muted">
+                                            <span className="mt-0.5 block text-[12px] sm:text-[13px] text-muted break-words leading-relaxed">
                                                 {quote.carrierName}
                                                 {formatEta(quote)}
                                             </span>
                                             {quote.packagingType === "PALLET" && quote.palletDimensions && (
-                                                <span className="mt-1 block text-[12px] font-medium text-teal-900/80">
+                                                <span className="mt-1 block text-[11px] sm:text-[12px] font-medium text-teal-900/80 break-words leading-normal">
                                                     Pallet: {quote.palletDimensions} {quote.boxCount ? `\u2022 ${quote.boxCount} boxes` : ""} {quote.totalWeightKg ? `\u2022 ${quote.totalWeightKg} kg` : ""}
                                                 </span>
                                             )}
                                         </span>
-                                        <span className="text-[15px] font-extrabold text-teal-950">
+                                        <span className="shrink-0 pl-2 text-right text-[14px] sm:text-[15px] font-extrabold text-teal-950">
                                             {quote.cost === 0 ? "Free" : format(quote.cost)}
                                         </span>
                                     </label>
