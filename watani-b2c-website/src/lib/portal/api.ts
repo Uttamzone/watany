@@ -88,17 +88,26 @@ export async function cancelMyOrder(orderNumber: string): Promise<OrderResponse>
         try {
             const stored = localStorage.getItem("watani_user_orders");
             let orders: OrderResponse[] = stored ? JSON.parse(stored) : [];
-            const index = orders.findIndex(o => o.orderNumber === orderNumber);
+            const index = orders.findIndex(o => (o.orderNumber || "").trim().toUpperCase() === (orderNumber || "").trim().toUpperCase());
+            const wasPaid = index !== -1
+                ? (orders[index].paymentStatus === "PAID" || orders[index].paymentStatus === "CAPTURED")
+                : (updatedOrder?.paymentStatus === "PAID" || updatedOrder?.paymentStatus === "CAPTURED");
+            const newPayStatus = wasPaid ? "REFUND_REQUIRED" : "CANCELLED";
+            const cancelMsg = wasPaid
+                ? "Order cancelled by customer. Refund processing required by store administration."
+                : "Order cancelled by customer prior to 2-day delivery window cutoff.";
+
             const cancelEvent = {
                 status: "CANCELLED" as const,
-                message: "Order cancelled by customer prior to 2-day delivery window cutoff.",
+                message: cancelMsg,
                 at: new Date().toISOString()
             };
+
             if (index !== -1) {
                 orders[index] = {
                     ...orders[index],
                     status: "CANCELLED",
-                    paymentStatus: "REFUNDED",
+                    paymentStatus: newPayStatus,
                     timeline: [cancelEvent, ...(orders[index].timeline || [])]
                 };
                 updatedOrder = orders[index];
@@ -106,11 +115,27 @@ export async function cancelMyOrder(orderNumber: string): Promise<OrderResponse>
                 orders.unshift({
                     ...updatedOrder,
                     status: "CANCELLED",
-                    paymentStatus: "REFUNDED",
+                    paymentStatus: newPayStatus,
                     timeline: [cancelEvent, ...(updatedOrder.timeline || [])]
                 });
             }
             localStorage.setItem("watani_user_orders", JSON.stringify(orders));
+
+            // Also synchronize with admin storage
+            const rawAdmin = localStorage.getItem("watani.adminOrders.v1");
+            if (rawAdmin) {
+                const adminList: any[] = JSON.parse(rawAdmin);
+                const aIdx = adminList.findIndex(o => (o.orderNumber || "").trim().toUpperCase() === (orderNumber || "").trim().toUpperCase());
+                if (aIdx !== -1) {
+                    adminList[aIdx] = {
+                        ...adminList[aIdx],
+                        status: "CANCELLED",
+                        paymentStatus: newPayStatus,
+                        timeline: [cancelEvent, ...(adminList[aIdx].timeline || [])]
+                    };
+                    localStorage.setItem("watani.adminOrders.v1", JSON.stringify(adminList));
+                }
+            }
         } catch {}
     }
 

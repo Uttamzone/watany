@@ -54,15 +54,27 @@ function deriveProfileFromEmail(email: string, firstName?: string, lastName?: st
 function saveStoredProfile(user: UserProfile | null) {
     if (typeof window === "undefined") return;
     if (user) {
-        localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(user));
+        try {
+            sessionStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(user));
+        } catch {}
+        try {
+            localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(user));
+        } catch {}
     } else {
-        localStorage.removeItem(PROFILE_STORAGE_KEY);
+        try {
+            sessionStorage.removeItem(PROFILE_STORAGE_KEY);
+        } catch {}
+        try {
+            localStorage.removeItem(PROFILE_STORAGE_KEY);
+        } catch {}
     }
 }
 
 function loadStoredProfile(): UserProfile | null {
     if (typeof window === "undefined") return null;
     try {
+        const sessionRaw = sessionStorage.getItem(PROFILE_STORAGE_KEY);
+        if (sessionRaw) return JSON.parse(sessionRaw);
         const raw = localStorage.getItem(PROFILE_STORAGE_KEY);
         return raw ? JSON.parse(raw) : null;
     } catch {
@@ -93,19 +105,31 @@ export function AuthProvider({children}: { children: React.ReactNode }) {
         let cancelled = false;
 
         async function restore() {
+            // First check if this specific tab already has an active user in sessionStorage
+            const tabUser = loadStoredProfile();
+            const tabToken = getAccessToken();
+
             const response = await silentRefresh();
             if (cancelled) return;
+
             if (response) {
-                setAccessToken(response.token);
-                setUserAndStore(response.user);
-                setStatus("authenticated");
+                // If this tab already had a specific logged-in user and the cookie returned a DIFFERENT user
+                // (e.g. user logged into another account in another tab on the same browser),
+                // do NOT overwrite this tab's user! Keep this tab on its own account.
+                if (tabUser && tabToken && response.user.email.toLowerCase() !== tabUser.email.toLowerCase()) {
+                    setAccessToken(tabToken);
+                    setUser(tabUser);
+                    setStatus("authenticated");
+                } else {
+                    setAccessToken(response.token);
+                    setUserAndStore(response.user);
+                    setStatus("authenticated");
+                }
             } else {
-                const storedUser = loadStoredProfile();
-                const token = getAccessToken() || (typeof window !== "undefined" ? localStorage.getItem("watani_access_token") : null);
-                if (storedUser) {
-                    const activeToken = token || `session-token-${storedUser.id}`;
+                if (tabUser) {
+                    const activeToken = tabToken || `session-token-${tabUser.id}`;
                     setAccessToken(activeToken);
-                    setUser(storedUser);
+                    setUser(tabUser);
                     setStatus("authenticated");
                 } else {
                     clearSession(false);

@@ -261,15 +261,44 @@ async function getOrderByNumber(req, res) {
 async function cancelOrder(req, res) {
     try {
         const { orderNumber } = req.params;
-        await db.query(`UPDATE orders SET status = 'CANCELLED', updated_at = NOW() WHERE UPPER(order_number) = UPPER($1)`, [orderNumber]);
+        const checkRes = await db.query(
+            'SELECT payment_status as "paymentStatus", grand_total as "grandTotal" FROM orders WHERE UPPER(order_number) = UPPER($1)',
+            [orderNumber]
+        );
+        const currentPayStatus = checkRes.rows.length > 0 ? (checkRes.rows[0].paymentStatus || '').toUpperCase() : '';
+        const wasPaid = currentPayStatus === 'PAID' || currentPayStatus === 'CAPTURED';
+        const newPayStatus = wasPaid ? 'REFUND_REQUIRED' : 'CANCELLED';
+
+        const { rows } = await db.query(`
+            UPDATE orders
+            SET status = 'CANCELLED',
+                payment_status = $1,
+                updated_at = NOW()
+            WHERE UPPER(order_number) = UPPER($2)
+            RETURNING *;
+        `, [newPayStatus, orderNumber]);
+
         await logAudit({
             req,
             action: 'ORDER_CANCELLED',
             entityType: 'ORDER',
             entityId: orderNumber,
-            newValue: { status: 'CANCELLED' }
+            newValue: { status: 'CANCELLED', paymentStatus: newPayStatus, requiresRefund: wasPaid }
         });
-        return res.json({ success: true, message: 'Order cancelled successfully' });
+
+        const orderObj = rows.length > 0 ? {
+            orderNumber: rows[0].order_number,
+            status: rows[0].status,
+            paymentStatus: rows[0].payment_status,
+            requiresRefund: wasPaid
+        } : null;
+
+        return res.json({
+            success: true,
+            message: wasPaid ? 'Order cancelled. Refund request has been queued for administration.' : 'Order cancelled successfully.',
+            requiresRefund: wasPaid,
+            order: orderObj
+        });
     } catch (err) {
         return res.status(500).json({ error: 'Internal Server Error', message: err.message });
     }

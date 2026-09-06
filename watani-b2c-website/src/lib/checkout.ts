@@ -481,6 +481,93 @@ export async function getShippingQuotes(
     } catch {}
 
     const taxRate = destination.country === "CA" ? 0.13 : 0.05;
+
+    let totalWeightGrams = 0;
+    let totalQuantity = 0;
+    if (Array.isArray(items)) {
+        for (const item of items) {
+            const qty = item.quantity || 1;
+            totalQuantity += qty;
+            let itemGrams = item.weight_grams || item.weightGrams;
+            if (!itemGrams) {
+                const name = (item.productName || item.product_name || item.name || "").toLowerCase();
+                const unit = (item.unit || "").toLowerCase();
+                if (name.includes("16l") || unit.includes("16l") || name.includes("16 litre") || name.includes("16 l")) {
+                    itemGrams = 15500;
+                } else if (name.includes("3l") || unit.includes("3l")) {
+                    itemGrams = 3200;
+                } else if (name.includes("750ml") || unit.includes("750ml")) {
+                    itemGrams = 1200;
+                } else if (name.includes("500g") || unit.includes("500g")) {
+                    itemGrams = 550;
+                } else if (name.includes("1kg") || unit.includes("1kg")) {
+                    itemGrams = 1050;
+                } else {
+                    itemGrams = 1000;
+                }
+            }
+            totalWeightGrams += itemGrams * qty;
+        }
+    }
+
+    const totalWeightKg = Math.round((totalWeightGrams / 1000) * 10) / 10;
+    const boxCount = Math.max(1, Math.max(Math.ceil(totalWeightKg / 14), Math.ceil(totalQuantity / 4)));
+    const isPallet = totalWeightKg >= 100 || boxCount >= 10;
+    const palletCount = isPallet ? Math.max(1, Math.ceil(totalWeightKg / 400)) : 0;
+
+    if (isPallet) {
+        const skidCost = 165.00 * palletCount;
+        const flatRateCost = 150.00 * palletCount;
+        const palletDimensions = `${palletCount} Pallet${palletCount > 1 ? "s" : ""} (40"x48", 400kg max/pallet)`;
+        return [
+            {
+                serviceCode: "FREIGHTCOM_PALLET_LTL",
+                carrierName: "Day & Ross LTL via Freightcom",
+                serviceName: `Freightcom Skid Shipping (${palletCount} Skid${palletCount > 1 ? "s" : ""} / Pallet${palletCount > 1 ? "s" : ""}, ${totalWeightKg}kg)`,
+                cost: skidCost,
+                etaDays: 3,
+                taxRate,
+                taxableAmount: 759,
+                exemptAmount: 0,
+                taxAmount: Math.round(skidCost * taxRate * 100) / 100,
+                packagingType: "PALLET",
+                palletDimensions,
+                totalWeightKg,
+                boxCount,
+            },
+            {
+                serviceCode: "PALLET_FLAT_RATE",
+                carrierName: "Watani Logistics Flat Rate",
+                serviceName: `Flat Rate Pallet Delivery ($150/pallet - ${palletCount} Pallet${palletCount > 1 ? "s" : ""})`,
+                cost: flatRateCost,
+                etaDays: 4,
+                taxRate,
+                taxableAmount: 759,
+                exemptAmount: 0,
+                taxAmount: Math.round(flatRateCost * taxRate * 100) / 100,
+                packagingType: "PALLET",
+                palletDimensions,
+                totalWeightKg,
+                boxCount,
+            },
+            {
+                serviceCode: PICKUP_SERVICE_CODE,
+                carrierName: "Watani Hub",
+                serviceName: "Warehouse Pallet Pickup (Free)",
+                cost: 0,
+                etaDays: 0,
+                taxRate,
+                taxableAmount: 0,
+                exemptAmount: 0,
+                taxAmount: 0,
+                packagingType: "PALLET",
+                palletDimensions,
+                totalWeightKg,
+                boxCount,
+            },
+        ];
+    }
+
     return [
         {
             serviceCode: "FREIGHTCOM_STANDARD",
@@ -492,6 +579,9 @@ export async function getShippingQuotes(
             taxableAmount: 759,
             exemptAmount: 0,
             taxAmount: 3.90,
+            packagingType: "PARCEL",
+            totalWeightKg,
+            boxCount,
         },
         {
             serviceCode: "FREIGHTCOM_EXPRESS",
@@ -503,6 +593,9 @@ export async function getShippingQuotes(
             taxableAmount: 759,
             exemptAmount: 0,
             taxAmount: 5.85,
+            packagingType: "PARCEL",
+            totalWeightKg,
+            boxCount,
         },
         {
             serviceCode: PICKUP_SERVICE_CODE,
@@ -514,6 +607,9 @@ export async function getShippingQuotes(
             taxableAmount: 0,
             exemptAmount: 0,
             taxAmount: 0,
+            packagingType: "PARCEL",
+            totalWeightKg,
+            boxCount,
         },
     ];
 }

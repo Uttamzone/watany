@@ -279,7 +279,9 @@ export type PaymentStatus =
     | "PAID"
     | "FAILED"
     | "REFUNDED"
+    | "REFUND_REQUIRED"
     | "PARTIALLY_REFUNDED"
+    | "CANCELLED"
     | "DISPUTED";
 
 export type PaymentMethod = "STRIPE" | "E_TRANSFER" | "CHEQUE";

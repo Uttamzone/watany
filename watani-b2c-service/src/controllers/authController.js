@@ -69,7 +69,13 @@ async function login(req, res) {
         `, [user.id]);
 
         let userRoles = (rolesRes.rows || []).map(r => r.name).filter(Boolean);
-        if (userRoles.length === 0) {
+        if (user.pricing_group === 'DISTRIBUTOR') {
+            if (!userRoles.includes('DISTRIBUTOR')) userRoles.push('DISTRIBUTOR');
+            userRoles = userRoles.filter(r => r !== 'RETAIL_CUSTOMER');
+        } else if (user.pricing_group === 'WHOLESALE') {
+            if (!userRoles.includes('WHOLESALE')) userRoles.push('WHOLESALE');
+            userRoles = userRoles.filter(r => r !== 'RETAIL_CUSTOMER');
+        } else if (userRoles.length === 0) {
             if (isExplicitAdminLogin || user.pricing_group === 'ADMIN') {
                 userRoles = ['SUPER_ADMIN'];
             } else {

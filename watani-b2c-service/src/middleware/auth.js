@@ -106,7 +106,13 @@ async function verifyToken(req, res, next) {
             [u.id]
         );
         let roles = (rolesRes.rows || []).map(r => r.name).filter(Boolean);
-        if (roles.length === 0) {
+        if (u.pricing_group === 'DISTRIBUTOR') {
+            if (!roles.includes('DISTRIBUTOR')) roles.push('DISTRIBUTOR');
+            roles = roles.filter(r => r !== 'RETAIL_CUSTOMER');
+        } else if (u.pricing_group === 'WHOLESALE') {
+            if (!roles.includes('WHOLESALE')) roles.push('WHOLESALE');
+            roles = roles.filter(r => r !== 'RETAIL_CUSTOMER');
+        } else if (roles.length === 0) {
             if (u.email === 'watani@admin' || u.pricing_group === 'ADMIN') {
                 roles = ['SUPER_ADMIN'];
             } else {

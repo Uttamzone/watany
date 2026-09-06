@@ -65,8 +65,12 @@ function calculateShipmentMetrics(items = []) {
     // Each box typically holds ~12-14kg or 4 standard consumer units
     const boxCount = Math.max(1, Math.max(Math.ceil(totalWeightKg / 14), Math.ceil(totalQuantity / 4)));
 
-    // Pallet condition: orders > 10 boxes OR > 100kg qualify for Pallet Pricing
+    // Pallet condition: orders >= 10 boxes OR >= 100kg qualify for Pallet Pricing.
+    // If the number of packages is less than 10 boxes (and < 100kg), it goes to parcel shipping.
     const isPallet = totalWeightKg >= 100 || boxCount >= 10;
+
+    // Every 400 kg needs 1 pallet (e.g., 400kg = 1 pallet, 401kg-800kg = 2 pallets, etc.)
+    const palletCount = isPallet ? Math.max(1, Math.ceil(totalWeightKg / 400)) : 0;
 
     // Pallet dimensions: 40" x 48", height is order dependent, max 40"
     const calculatedHeightInches = Math.min(40, Math.max(20, Math.ceil(boxCount / 4) * 8));
@@ -75,7 +79,8 @@ function calculateShipmentMetrics(items = []) {
         totalWeightKg,
         boxCount,
         isPallet,
-        palletDimensions: isPallet ? `40" x 48" x ${calculatedHeightInches}" (Max 40"H)` : null,
+        palletCount,
+        palletDimensions: isPallet ? `${palletCount} Pallet${palletCount > 1 ? 's' : ''} (40"x48", 400kg max/pallet)` : null,
         palletHeightInches: isPallet ? calculatedHeightInches : null
     };
 }
@@ -86,15 +91,13 @@ async function fetchRatesFromFreightcom(destination, metrics) {
     }
 
     const packages = metrics.isPallet
-        ? [
-            {
-                type: 'PALLET',
-                length: 48,
-                width: 40,
-                height: metrics.palletHeightInches || 40,
-                weightKg: Math.max(100, metrics.totalWeightKg)
-            }
-        ]
+        ? Array.from({ length: metrics.palletCount || 1 }, () => ({
+            type: 'PALLET',
+            length: 48,
+            width: 40,
+            height: metrics.palletHeightInches || 40,
+            weightKg: Math.max(50, Math.round(metrics.totalWeightKg / (metrics.palletCount || 1)))
+        }))
         : [
             {
                 type: 'PACKAGE',
@@ -179,37 +182,25 @@ async function getFreightcomQuotes(destination = {}, subtotal = 0, items = []) {
     }
 
     const metrics = calculateShipmentMetrics(items);
-    const { totalWeightKg, boxCount, isPallet, palletDimensions } = metrics;
-
-    // Try live rates from Freightcom API
-    const liveData = await fetchRatesFromFreightcom(destination, metrics);
-    if (liveData && Array.isArray(liveData.rates) && liveData.rates.length > 0) {
-        return liveData.rates.map(r => {
-            const cost = typeof r.rate === 'number' ? r.rate : parseFloat(r.rate || '30.00');
-            return {
-                serviceCode: r.serviceCode || (isPallet ? 'FREIGHTCOM_PALLET_LTL' : 'FREIGHTCOM_STANDARD'),
-                carrierName: r.carrierName || (isPallet ? 'Day & Ross LTL via Freightcom' : 'Freightcom Direct'),
-                serviceName: r.serviceName || (isPallet ? `Pallet Freight (${palletDimensions})` : 'Freightcom Shipping'),
-                cost,
-                etaDays: r.etaDays || (isPallet ? 3 : 2),
-                packagingType: isPallet ? 'PALLET' : 'PARCEL',
-                dimensions: palletDimensions,
-                totalWeightKg,
-                boxCount,
-                taxRate,
-                taxableAmount: subtotal,
-                exemptAmount: 0,
-                taxAmount: Math.round(cost * taxRate * 100) / 100
-            };
-        });
-    }
+    const { totalWeightKg, boxCount, isPallet, palletCount, palletDimensions } = metrics;
 
     // ==========================================
-    // PALLET PRICING (> 10 boxes OR > 100 kg)
+    // PALLET PRICING (>= 10 boxes OR >= 100 kg)
+    // Every 400 kg needs 1 pallet. Customers choose between Freightcom Skid Shipping and Flat Rate Pallet options.
     // ==========================================
     if (isPallet) {
-        let basePalletCost = 165.00; // Ontario regional base for 40"x48" pallet
+        let flatRatePerPallet = 150.00;
+        try {
+            const db = require('../db');
+            const { rows } = await db.query('SELECT pallet_fee FROM pallet_shipping WHERE enabled = TRUE LIMIT 1');
+            if (rows.length > 0 && rows[0].pallet_fee) {
+                flatRatePerPallet = parseFloat(rows[0].pallet_fee) || 150.00;
+            }
+        } catch {}
 
+        const flatRateCost = Math.round(flatRatePerPallet * palletCount * 100) / 100;
+
+        let basePalletCost = 165.00; // Ontario regional base for 40"x48" pallet
         if (country === 'US') {
             basePalletCost = 340.00;
         } else if (prov === 'QC') {
@@ -222,44 +213,52 @@ async function getFreightcomQuotes(destination = {}, subtotal = 0, items = []) {
             basePalletCost = 245.00;
         }
 
-        // Weight surcharge if exceeding 200kg ($0.20 per kg above 200kg)
-        if (totalWeightKg > 200) {
-            basePalletCost += Math.round((totalWeightKg - 200) * 0.20 * 100) / 100;
-        }
+        let freightcomSkidCost = Math.round(basePalletCost * palletCount * 100) / 100;
+        let freightcomCarrier = 'Day & Ross LTL via Freightcom';
 
-        const standardPalletCost = Math.round(basePalletCost * 100) / 100;
-        const priorityPalletCost = Math.round(basePalletCost * 1.3 * 100) / 100;
+        // Check if Freightcom live rates are available
+        const liveData = await fetchRatesFromFreightcom(destination, metrics);
+        if (liveData && Array.isArray(liveData.rates) && liveData.rates.length > 0) {
+            const first = liveData.rates[0];
+            const rCost = typeof first.rate === 'number' ? first.rate : parseFloat(first.rate || '0');
+            if (rCost > 0) {
+                freightcomSkidCost = Math.round(rCost * 100) / 100;
+                if (first.carrierName) freightcomCarrier = first.carrierName;
+            }
+        }
 
         return [
             {
                 serviceCode: 'FREIGHTCOM_PALLET_LTL',
-                carrierName: 'Day & Ross LTL via Freightcom',
-                serviceName: `Standard Pallet Freight (40"x48" Pallet, ${boxCount} boxes / ${totalWeightKg}kg)`,
-                cost: standardPalletCost,
+                carrierName: freightcomCarrier,
+                serviceName: `Freightcom Skid Shipping (${palletCount} Skid${palletCount > 1 ? 's' : ''} / Pallet${palletCount > 1 ? 's' : ''}, ${totalWeightKg}kg)`,
+                cost: freightcomSkidCost,
                 etaDays: prov === 'ON' ? 2 : prov === 'QC' ? 3 : 4,
                 packagingType: 'PALLET',
                 palletDimensions,
+                palletCount,
                 totalWeightKg,
                 boxCount,
                 taxRate,
                 taxableAmount: subtotal,
                 exemptAmount: 0,
-                taxAmount: Math.round(standardPalletCost * taxRate * 100) / 100
+                taxAmount: Math.round(freightcomSkidCost * taxRate * 100) / 100
             },
             {
-                serviceCode: 'FREIGHTCOM_PALLET_EXPRESS',
-                carrierName: 'Manitoulin Transport via Freightcom',
-                serviceName: `Priority Pallet Freight (40"x48" Pallet, ${boxCount} boxes / ${totalWeightKg}kg)`,
-                cost: priorityPalletCost,
-                etaDays: prov === 'ON' ? 1 : prov === 'QC' ? 2 : 3,
+                serviceCode: 'PALLET_FLAT_RATE',
+                carrierName: 'Watani Logistics Flat Rate',
+                serviceName: `Flat Rate Pallet Delivery ($${flatRatePerPallet}/pallet - ${palletCount} Pallet${palletCount > 1 ? 's' : ''})`,
+                cost: flatRateCost,
+                etaDays: prov === 'ON' ? 3 : 5,
                 packagingType: 'PALLET',
                 palletDimensions,
+                palletCount,
                 totalWeightKg,
                 boxCount,
                 taxRate,
                 taxableAmount: subtotal,
                 exemptAmount: 0,
-                taxAmount: Math.round(priorityPalletCost * taxRate * 100) / 100
+                taxAmount: Math.round(flatRateCost * taxRate * 100) / 100
             },
             {
                 serviceCode: 'PICKUP',
@@ -269,6 +268,7 @@ async function getFreightcomQuotes(destination = {}, subtotal = 0, items = []) {
                 etaDays: 0,
                 packagingType: 'PALLET',
                 palletDimensions,
+                palletCount,
                 totalWeightKg,
                 boxCount,
                 taxRate,
@@ -282,6 +282,27 @@ async function getFreightcomQuotes(destination = {}, subtotal = 0, items = []) {
     // ==========================================
     // STANDARD PARCEL PRICING (< 100kg and < 10 boxes)
     // ==========================================
+    const liveParcelData = await fetchRatesFromFreightcom(destination, metrics);
+    if (liveParcelData && Array.isArray(liveParcelData.rates) && liveParcelData.rates.length > 0) {
+        return liveParcelData.rates.map(r => {
+            const cost = typeof r.rate === 'number' ? r.rate : parseFloat(r.rate || '30.00');
+            return {
+                serviceCode: r.serviceCode || 'FREIGHTCOM_STANDARD',
+                carrierName: r.carrierName || 'Freightcom Direct',
+                serviceName: r.serviceName || 'Expedited Parcel Shipping',
+                cost,
+                etaDays: r.etaDays || 2,
+                packagingType: 'PARCEL',
+                totalWeightKg,
+                boxCount,
+                taxRate,
+                taxableAmount: subtotal,
+                exemptAmount: 0,
+                taxAmount: Math.round(cost * taxRate * 100) / 100
+            };
+        });
+    }
+
     let baseParcelCost = 22.00;
     if (country === 'US') {
         baseParcelCost = 36.00;

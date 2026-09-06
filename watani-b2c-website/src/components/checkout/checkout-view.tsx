@@ -4,7 +4,7 @@ import {useCallback, useEffect, useMemo, useState} from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {useRouter} from "next/navigation";
-import {Loader2, Lock, MapPin} from "lucide-react";
+import {CreditCard, Loader2, Lock, MapPin} from "lucide-react";
 import {useCart} from "@/components/cart/cart-store";
 import {useAuth} from "@/components/auth/auth-store";
 import {useNotifications} from "@/components/notifications/notification-store";
@@ -376,6 +376,8 @@ export function CheckoutView() {
             const cartItems = lines.map((l) => ({
                 variantId: l.variantId,
                 quantity: l.quantity,
+                productName: l.productName,
+                unit: l.unit,
             }));
             const options = await getShippingQuotes(address, cartItems);
             setQuotes(options);
@@ -791,10 +793,22 @@ export function CheckoutView() {
                             ))}
                         </ul>
 
+                        {!canUseManualPayment && (
+                            <div className="mt-6 rounded-[14px] border border-black/10 bg-white p-4">
+                                <div className="flex items-center gap-2.5">
+                                    <CreditCard className="size-4 text-teal-950" />
+                                    <span className="text-[14px] font-bold text-teal-950">Payment: Card (Stripe)</span>
+                                </div>
+                                <p className="mt-1 text-[12px] text-muted">
+                                    Wholesale and Retail customers pay securely via Stripe. All major credit cards accepted.
+                                </p>
+                            </div>
+                        )}
+
                         {canUseManualPayment && (
                             <div className="mt-6">
                                 <h3 className="text-[15px] font-extrabold text-teal-950">
-                                    Distributor Payment Option
+                                    Distributor Payment Options
                                 </h3>
                                 <p className="mt-1 text-[13px] text-muted">
                                     Distributors can place orders without immediate card payment. You can select e-Transfer or Cheque, and our team will approve the order upon payment verification.

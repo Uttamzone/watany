@@ -301,6 +301,18 @@ function UserCard({onLogout, onNavigate}: { onLogout: () => void; onNavigate?: (
     const displayName =
         user.firstName || user.lastName ? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() : user.email;
     const primaryRole = user.roles[0];
+    const admin = isAdminRole(user.roles);
+
+    const CUSTOMER_TIER_LABEL: Record<string, string> = {
+        RETAIL: "Retail Customer",
+        WHOLESALE: "Wholesale Customer",
+        DISTRIBUTOR: "Distributor",
+        ADMIN: "Administrator",
+    };
+
+    const subtitle = admin
+        ? (primaryRole ? ROLE_LABELS[primaryRole] ?? primaryRole : "Administrator")
+        : (CUSTOMER_TIER_LABEL[user.pricingGroup] || (user.pricingGroup === "DISTRIBUTOR" ? "Distributor" : "Customer"));
 
     return (
         <div ref={containerRef} className="relative">
@@ -323,6 +335,9 @@ function UserCard({onLogout, onNavigate}: { onLogout: () => void; onNavigate?: (
                             <div className="min-w-0">
                                 <p className="truncate text-[14px] font-bold text-teal-950">{displayName}</p>
                                 <p className="truncate text-[12px] text-muted">{user.email}</p>
+                                <p className="mt-0.5 inline-block rounded-full bg-soft-control px-2 py-0.5 text-[11px] font-semibold text-teal-900">
+                                    {subtitle}
+                                </p>
                             </div>
                         </div>
 
@@ -374,7 +389,7 @@ function UserCard({onLogout, onNavigate}: { onLogout: () => void; onNavigate?: (
                 <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] font-bold text-teal-950">{displayName}</span>
           <span className="block truncate text-[11px] font-medium text-muted">
-            {primaryRole ? ROLE_LABELS[primaryRole] ?? primaryRole : "-"}
+            {subtitle}
           </span>
         </span>
                 <ChevronsUpDown className="size-4 shrink-0 text-muted" aria-hidden/>

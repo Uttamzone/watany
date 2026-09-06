@@ -53,16 +53,28 @@ export function setAccessToken(token: string | null) {
     currentAccessToken = token;
     if (typeof window !== "undefined") {
         if (token) {
-            localStorage.setItem("watani_access_token", token);
+            try {
+                sessionStorage.setItem("watani_access_token", token);
+            } catch {}
+            try {
+                localStorage.setItem("watani_access_token", token);
+            } catch {}
         } else {
-            localStorage.removeItem("watani_access_token");
+            try {
+                sessionStorage.removeItem("watani_access_token");
+            } catch {}
+            try {
+                localStorage.removeItem("watani_access_token");
+            } catch {}
         }
     }
 }
 
 export function getAccessToken(): string | null {
     if (!currentAccessToken && typeof window !== "undefined") {
-        currentAccessToken = localStorage.getItem("watani_access_token");
+        try {
+            currentAccessToken = sessionStorage.getItem("watani_access_token") || localStorage.getItem("watani_access_token");
+        } catch {}
     }
     return currentAccessToken;
 }

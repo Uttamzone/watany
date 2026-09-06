@@ -236,6 +236,9 @@ async function createIntent(req, res) {
 
         const shippingQuotes = await getFreightcomQuotes(destObj, subtotal, items);
         let selectedQuote = shippingQuotes.find(q => q.serviceCode === shippingServiceCode);
+        if (!selectedQuote && (shippingServiceCode === 'PALLET_FLAT' || shippingServiceCode === 'PALLET_FLAT_RATE')) {
+            selectedQuote = shippingQuotes.find(q => q.serviceCode === 'PALLET_FLAT_RATE' || q.serviceCode === 'PALLET_FLAT');
+        }
         if (!selectedQuote) {
             selectedQuote = shippingQuotes[0] || {
                 cost: parseFloat(process.env.SHIPPING_FLAT_RATE || '30.00'),

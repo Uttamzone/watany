@@ -30,6 +30,7 @@ const STATUS_TONE: Record<string, keyof typeof TONE_CLASSES> = {
     FAILED: "negative",
     PARTIALLY_REFUNDED: "warning",
     DISPUTED: "negative",
+    REFUND_REQUIRED: "negative",
 };
 
 const STATUS_DESCRIPTIONS: Record<string, string> = {
@@ -56,6 +57,7 @@ const STATUS_DESCRIPTIONS: Record<string, string> = {
     FAILED: "Payment attempt failed.",
     PARTIALLY_REFUNDED: "Part of the payment has been refunded.",
     DISPUTED: "Payment is under dispute.",
+    REFUND_REQUIRED: "Customer cancelled this order after payment. A refund must be issued.",
 };
 
 export function StatusBadge({status}: { status: string }) {

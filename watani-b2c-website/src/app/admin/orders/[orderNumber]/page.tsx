@@ -224,6 +224,33 @@ export default function AdminOrderDetailPage({
                 </div>
             </div>
 
+            {(order.paymentStatus === "REFUND_REQUIRED" || (order.status === "CANCELLED" && isPaid)) && (
+                <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-rose-300 bg-rose-50 p-4 text-rose-950 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-3">
+                        <AlertCircle className="size-6 shrink-0 text-rose-600" aria-hidden />
+                        <div>
+                            <p className="text-[14px] font-bold text-rose-900">
+                                Customer Cancelled Order — Refund Required ({money(order.grandTotal, order.currency)})
+                            </p>
+                            <p className="text-[12px] text-rose-700">
+                                This order was cancelled by the customer after payment was captured. Please process a refund.
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setRefundAmount(String(order.grandTotal));
+                            setRefundOpen(true);
+                        }}
+                        className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-rose-600 px-4 py-2 text-[13px] font-bold text-white shadow-xs transition-colors hover:bg-rose-700"
+                    >
+                        <RotateCcw className="size-3.5" />
+                        Issue Full Refund
+                    </button>
+                </div>
+            )}
+
             {order.pricingGroup === "DISTRIBUTOR" && (
                 <div className="mt-4 flex items-start gap-3 rounded-2xl border border-sky-200 bg-sky-50/80 p-4 text-sky-950">
                     <CheckCircle2 className="size-5 shrink-0 text-sky-600 mt-0.5" aria-hidden />
