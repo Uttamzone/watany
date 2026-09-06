@@ -3,7 +3,7 @@
 import {use, useEffect, useState} from "react";
 import Link from "next/link";
 import {useRouter} from "next/navigation";
-import {ArrowLeft, ArrowRight, BadgeCheck, ClipboardList, ReceiptText, Trash2, RotateCcw, AlertCircle, CheckCircle2} from "lucide-react";
+import {ArrowLeft, ArrowRight, BadgeCheck, ClipboardList, ReceiptText, Trash2, RotateCcw, AlertCircle, CheckCircle2, Box, Truck, ExternalLink} from "lucide-react";
 import * as adminApi from "@/lib/admin/api";
 import type {OrderResponse, OrderStatus} from "@/lib/admin/types";
 import {getOrderStatusTransitions} from "@/lib/admin/types";
@@ -351,6 +351,89 @@ export default function AdminOrderDetailPage({
                                 </p>
                             </div>
                         )}
+                    </div>
+
+                    {/* Customer Delivery Selection & Fulfillment Status */}
+                    <div className="rounded-2xl bg-white p-5 shadow-card border border-teal-950/10">
+                        <div className="flex items-center gap-2">
+                            <Truck className="size-4 text-teal-950" aria-hidden/>
+                            <h2 className="text-[15px] font-bold text-teal-950">Delivery &amp; Fulfillment</h2>
+                        </div>
+                        
+                        <div className="mt-3 space-y-2.5">
+                            <div>
+                                <span className="text-[11px] font-bold uppercase tracking-wider text-muted">Customer Delivery Option</span>
+                                <p className="text-[14px] font-bold text-teal-950 mt-0.5">
+                                    {order.shippingMethod || "Freightcom Standard Shipping"}
+                                </p>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2 pt-1">
+                                {(order.shippingMethod?.toLowerCase().includes("pallet") || order.shippingMethod?.toLowerCase().includes("skid") || (order.shippingTotal >= 150)) ? (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-extrabold text-amber-900 uppercase">
+                                        <Box className="size-3" /> 40&quot;&times;48&quot; Pallet Freight
+                                    </span>
+                                ) : order.shippingMethod?.toLowerCase().includes("pickup") ? (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-[11px] font-extrabold text-blue-900 uppercase">
+                                        Warehouse Pickup
+                                    </span>
+                                ) : (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-teal-100 px-2.5 py-0.5 text-[11px] font-extrabold text-teal-900 uppercase">
+                                        <Truck className="size-3" /> Standard Parcel
+                                    </span>
+                                )}
+                                <span className="text-[12px] font-semibold text-muted">
+                                    Paid: {money(order.shippingTotal, order.currency)}
+                                </span>
+                            </div>
+
+                            <div className="border-t border-black/5 pt-2.5">
+                                <span className="text-[11px] font-bold uppercase tracking-wider text-muted">Carrier</span>
+                                <p className="text-[13px] font-medium text-teal-950">
+                                    {order.carrierName || "Freightcom Direct"}
+                                </p>
+                            </div>
+
+                            {order.trackingNumber ? (
+                                <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 mt-2">
+                                    <span className="text-[11px] font-extrabold text-emerald-900 uppercase tracking-wide">Tracking Number</span>
+                                    <p className="text-[14px] font-mono font-bold text-emerald-950 mt-0.5">{order.trackingNumber}</p>
+                                    {order.trackingUrl && (
+                                        <a
+                                            href={order.trackingUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="mt-1.5 inline-flex items-center gap-1 text-[12px] font-bold text-emerald-800 underline hover:text-emerald-950"
+                                        >
+                                            Track Package Online <ExternalLink className="size-3" />
+                                        </a>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="flex flex-col gap-2 pt-1 border-t border-black/5">
+                                    <div className="flex items-center justify-between text-[12px] pt-1">
+                                        <span className="text-muted">Fulfillment status:</span>
+                                        <span className="font-bold text-teal-950">
+                                            {order.status === "PACKED" ? "Packed - Ready to Ship" : "Ready to Pack"}
+                                        </span>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <a
+                                            href="#pack"
+                                            className="flex-1 inline-flex items-center justify-center gap-1 rounded-xl bg-soft-control border border-black/10 py-2 text-[12px] font-bold text-teal-950 hover:bg-black/5 transition-colors"
+                                        >
+                                            <Box className="size-3.5" /> Pack Boxes
+                                        </a>
+                                        <a
+                                            href="#ship"
+                                            className="flex-1 inline-flex items-center justify-center gap-1 rounded-xl bg-teal-950 py-2 text-[12px] font-bold text-white hover:bg-teal-900 transition-colors"
+                                        >
+                                            <Truck className="size-3.5" /> Book Shipping
+                                        </a>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     <div className="rounded-2xl bg-white p-5 shadow-card">

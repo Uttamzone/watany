@@ -35,7 +35,17 @@ export function OrderShipPanel({
     const [cancelOpen, setCancelOpen] = useState(false);
 
     if (order.status !== "PACKED" && !order.trackingNumber) {
-        return null;
+        return (
+            <div id="ship" className="rounded-2xl bg-white p-5 shadow-card border border-dashed border-black/15 scroll-mt-20">
+                <div className="flex items-center gap-2">
+                    <Truck className="size-4 text-muted" aria-hidden/>
+                    <h2 className="text-[15px] font-bold text-teal-950">Shipping &amp; carrier booking</h2>
+                </div>
+                <p className="mt-2 text-[12px] text-muted leading-relaxed">
+                    Once you save packing in the <strong>Pack order &amp; merge boxes</strong> panel, this section unlocks to calculate carrier rates and book the shipment with tracking.
+                </p>
+            </div>
+        );
     }
 
     async function getRates() {
@@ -89,7 +99,7 @@ export function OrderShipPanel({
     }
 
     return (
-        <div className="rounded-2xl bg-white p-5 shadow-card">
+        <div id="ship" className="rounded-2xl bg-white p-5 shadow-card scroll-mt-20">
             <div className="flex items-center gap-2">
                 <Truck className="size-4 text-teal-950" aria-hidden/>
                 <h2 className="text-[15px] font-bold text-teal-950">Shipping & tracking</h2>

@@ -3,7 +3,7 @@
 import {useEffect, useState, useMemo} from "react";
 import Link from "next/link";
 import {useRouter} from "next/navigation";
-import {BadgeCheck, Eye, Play, RotateCcw, Search, Trash2, AlertCircle} from "lucide-react";
+import {BadgeCheck, Eye, Play, RotateCcw, Search, Trash2, AlertCircle, Box, Truck} from "lucide-react";
 import * as adminApi from "@/lib/admin/api";
 import type {OrderResponse, OrderSortField, OrderStatus, SortDirection} from "@/lib/admin/types";
 import {AdminTable, type AdminTableColumn} from "@/components/admin/admin-table";
@@ -32,7 +32,7 @@ const PAYMENT_METHOD_LABEL: Record<string, string> = {
     CHEQUE: "Cheque",
 };
 
-type FilterTab = "ALL" | "REFUND_REQUIRED" | "UNPAID" | "AWAITING_FULFILLMENT" | "COMPLETED";
+type FilterTab = "ALL" | "REFUND_REQUIRED" | "READY_TO_PACK" | "READY_TO_SHIP" | "COMPLETED" | "UNPAID";
 
 export default function AdminOrdersPage() {
     const notifications = useNotifications();
@@ -170,7 +170,9 @@ export default function AdminOrdersPage() {
                 !searchQuery.trim() ||
                 (order.orderNumber || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
                 (order.email || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-                (order.shippingAddress?.fullName || "").toLowerCase().includes(searchQuery.toLowerCase());
+                (order.shippingAddress?.fullName || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (order.carrierName || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (order.shippingMethod || "").toLowerCase().includes(searchQuery.toLowerCase());
 
             if (!matchesSearch) return false;
 
@@ -183,11 +185,17 @@ export default function AdminOrdersPage() {
             if (filterTab === "UNPAID") {
                 return !isPaid && order.status !== "CANCELLED" && order.paymentStatus !== "REFUNDED";
             }
-            if (filterTab === "AWAITING_FULFILLMENT") {
-                return order.status === "PLACED" || order.status === "PROCESSING" || order.status === "PACKED";
+            if (filterTab === "READY_TO_PACK") {
+                return (
+                    (order.status === "PLACED" || order.status === "PROCESSING" || (isPaid && order.status === "PAID")) &&
+                    !isRefundReq
+                );
+            }
+            if (filterTab === "READY_TO_SHIP") {
+                return order.status === "PACKED";
             }
             if (filterTab === "COMPLETED") {
-                return order.status === "DELIVERED";
+                return order.status === "DELIVERED" || order.status === "SHIPPED";
             }
             return true;
         });
@@ -196,19 +204,30 @@ export default function AdminOrdersPage() {
     const counts = useMemo(() => {
         let refundReqCount = 0;
         let unpaidCount = 0;
-        let awaitingCount = 0;
+        let readyToPackCount = 0;
+        let readyToShipCount = 0;
+        let completedCount = 0;
         for (const o of items) {
             const isPaid = o.paymentStatus === "PAID" || o.paymentStatus === "CAPTURED";
-            if (o.paymentStatus === "REFUND_REQUIRED" || (o.status === "CANCELLED" && isPaid)) {
+            const isRefundReq = o.paymentStatus === "REFUND_REQUIRED" || (o.status === "CANCELLED" && isPaid);
+            if (isRefundReq) {
                 refundReqCount++;
             } else if (!isPaid && o.status !== "CANCELLED" && o.paymentStatus !== "REFUNDED") {
                 unpaidCount++;
             }
-            if (o.status === "PLACED" || o.status === "PROCESSING" || o.status === "PACKED") {
-                awaitingCount++;
+            if (o.status === "PACKED") {
+                readyToShipCount++;
+            } else if (
+                (o.status === "PLACED" || o.status === "PROCESSING" || (isPaid && o.status === "PAID")) &&
+                !isRefundReq
+            ) {
+                readyToPackCount++;
+            }
+            if (o.status === "DELIVERED" || o.status === "SHIPPED") {
+                completedCount++;
             }
         }
-        return { refundReqCount, unpaidCount, awaitingCount };
+        return { refundReqCount, unpaidCount, readyToPackCount, readyToShipCount, completedCount };
     }, [items]);
 
     const columns: AdminTableColumn<OrderResponse>[] = [
@@ -233,8 +252,8 @@ export default function AdminOrdersPage() {
             sortKey: "email",
             render: (row) => (
                 <div className="flex flex-col">
-                    <span className="font-medium text-teal-950 truncate max-w-[160px]">{row.shippingAddress?.fullName || row.email}</span>
-                    <span className="text-[11px] text-muted truncate max-w-[160px]">{row.email}</span>
+                    <span className="font-medium text-teal-950 truncate max-w-[150px]">{row.shippingAddress?.fullName || row.email}</span>
+                    <span className="text-[11px] text-muted truncate max-w-[150px]">{row.email}</span>
                 </div>
             ),
         },
@@ -294,20 +313,59 @@ export default function AdminOrdersPage() {
             },
         },
         {
-            key: "method",
-            header: "Method",
-            render: (row) => (
-                <span className="text-[12px] font-medium text-muted">
-                    {PAYMENT_METHOD_LABEL[row.paymentMethod] ?? row.paymentMethod}
-                </span>
-            ),
+            key: "shipping",
+            header: "Shipping & Fulfillment",
+            render: (row) => {
+                const methodLower = (row.shippingMethod || "").toLowerCase();
+                const isPallet = methodLower.includes("pallet") || methodLower.includes("skid");
+                const isShipped = row.status === "SHIPPED" || row.status === "DELIVERED";
+                const isPacked = row.status === "PACKED";
+
+                return (
+                    <div className="flex flex-col gap-1 min-w-[140px]">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                            <span
+                                className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                                    isPallet
+                                        ? "bg-purple-100 text-purple-800 border border-purple-200"
+                                        : "bg-sky-100 text-sky-800 border border-sky-200"
+                                }`}
+                            >
+                                {isPallet ? "Pallet" : "Parcel"}
+                            </span>
+                            {row.carrierName && (
+                                <span className="text-[11px] font-semibold text-teal-950 truncate max-w-[100px]">
+                                    {row.carrierName}
+                                </span>
+                            )}
+                        </div>
+                        <span className="text-[11px] text-muted truncate max-w-[160px]" title={row.shippingMethod || "Standard Shipping"}>
+                            {row.shippingMethod || "Standard Shipping"}
+                        </span>
+                        {isShipped ? (
+                            <span className="text-[10px] font-bold text-emerald-700">
+                                {row.trackingNumber ? `Track: ${row.trackingNumber}` : "Dispatched"}
+                            </span>
+                        ) : isPacked ? (
+                            <span className="text-[10px] font-bold text-teal-700">
+                                Packed • Ready to Ship
+                            </span>
+                        ) : null}
+                    </div>
+                );
+            },
         },
         {
             key: "total",
             header: "Total",
             sortKey: "grandTotal",
             render: (row) => (
-                <span className="font-bold text-teal-950">{money(row.grandTotal, row.currency)}</span>
+                <div className="flex flex-col">
+                    <span className="font-bold text-teal-950">{money(row.grandTotal, row.currency)}</span>
+                    <span className="text-[11px] text-muted">
+                        {PAYMENT_METHOD_LABEL[row.paymentMethod] ?? row.paymentMethod}
+                    </span>
+                </div>
             ),
         },
         {
@@ -323,6 +381,14 @@ export default function AdminOrdersPage() {
             render: (row) => {
                 const isPaid = row.paymentStatus === "PAID" || row.paymentStatus === "CAPTURED";
                 const isRefundRequired = row.paymentStatus === "REFUND_REQUIRED" || (row.status === "CANCELLED" && isPaid);
+                const isPacked = row.status === "PACKED";
+                const canPack =
+                    (row.status === "PROCESSING" || row.status === "PLACED" || isPaid) &&
+                    row.status !== "CANCELLED" &&
+                    row.status !== "SHIPPED" &&
+                    row.status !== "DELIVERED" &&
+                    !isRefundRequired;
+
                 const actions: RowAction[] = [
                     {label: "View order", icon: Eye, onSelect: () => router.push(`/admin/orders/${row.orderNumber}`)},
                 ];
@@ -350,6 +416,22 @@ export default function AdminOrdersPage() {
                     });
                 }
 
+                if (canPack) {
+                    actions.push({
+                        label: isPacked ? "Edit packed boxes" : "Pack & merge boxes",
+                        icon: Box,
+                        onSelect: () => router.push(`/admin/orders/${row.orderNumber}#pack`),
+                    });
+                }
+
+                if (isPacked) {
+                    actions.push({
+                        label: "Book carrier shipment",
+                        icon: Truck,
+                        onSelect: () => router.push(`/admin/orders/${row.orderNumber}#ship`),
+                    });
+                }
+
                 actions.push({
                     label: "Delete order",
                     icon: Trash2,
@@ -369,6 +451,24 @@ export default function AdminOrdersPage() {
                                 Refund
                             </button>
                         )}
+                        {!isRefundRequired && isPacked && (
+                            <Link
+                                href={`/admin/orders/${row.orderNumber}#ship`}
+                                className="inline-flex items-center gap-1.5 rounded-full bg-teal-800 px-3 py-1 text-[11px] font-bold text-white shadow-xs transition-colors hover:bg-teal-900"
+                            >
+                                <Truck className="size-3.5" />
+                                Ship
+                            </Link>
+                        )}
+                        {!isRefundRequired && !isPacked && canPack && (
+                            <Link
+                                href={`/admin/orders/${row.orderNumber}#pack`}
+                                className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 px-3 py-1 text-[11px] font-bold text-amber-900 shadow-xs transition-colors hover:bg-amber-500/25"
+                            >
+                                <Box className="size-3.5" />
+                                Pack
+                            </Link>
+                        )}
                         <RowActions actions={actions} label={`Actions for order ${row.orderNumber}`}/>
                     </div>
                 );
@@ -381,7 +481,9 @@ export default function AdminOrdersPage() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <h1 className="text-[26px] font-extrabold text-teal-950">Orders</h1>
-                    <p className="mt-1 text-[13px] text-muted">Track fulfilment, customer cancellations, and refunds.</p>
+                    <p className="mt-1 text-[13px] text-muted">
+                        Track fulfilment, pack and merge boxes, book Freightcom carrier shipping, and handle refunds.
+                    </p>
                 </div>
                 {counts.refundReqCount > 0 && (
                     <div className="flex items-center gap-2 rounded-2xl bg-rose-50 border border-rose-200 px-4 py-2.5 text-rose-900">
@@ -432,21 +534,23 @@ export default function AdminOrdersPage() {
                     </button>
                     <button
                         type="button"
-                        onClick={() => setFilterTab("UNPAID")}
-                        className={`rounded-full px-3.5 py-1.5 text-[13px] font-bold transition-colors ${
-                            filterTab === "UNPAID" ? "bg-teal-950 text-white" : "bg-white text-teal-950 hover:bg-soft-control border border-black/10"
+                        onClick={() => setFilterTab("READY_TO_PACK")}
+                        className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] font-bold transition-colors ${
+                            filterTab === "READY_TO_PACK" ? "bg-teal-950 text-white" : "bg-white text-teal-950 hover:bg-soft-control border border-black/10"
                         }`}
                     >
-                        Unpaid ({counts.unpaidCount})
+                        <Box className="size-3.5" />
+                        Ready to Pack ({counts.readyToPackCount})
                     </button>
                     <button
                         type="button"
-                        onClick={() => setFilterTab("AWAITING_FULFILLMENT")}
-                        className={`rounded-full px-3.5 py-1.5 text-[13px] font-bold transition-colors ${
-                            filterTab === "AWAITING_FULFILLMENT" ? "bg-teal-950 text-white" : "bg-white text-teal-950 hover:bg-soft-control border border-black/10"
+                        onClick={() => setFilterTab("READY_TO_SHIP")}
+                        className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] font-bold transition-colors ${
+                            filterTab === "READY_TO_SHIP" ? "bg-teal-950 text-white" : "bg-white text-teal-950 hover:bg-soft-control border border-black/10"
                         }`}
                     >
-                        Awaiting Fulfillment ({counts.awaitingCount})
+                        <Truck className="size-3.5" />
+                        Ready to Ship ({counts.readyToShipCount})
                     </button>
                     <button
                         type="button"
@@ -455,7 +559,16 @@ export default function AdminOrdersPage() {
                             filterTab === "COMPLETED" ? "bg-teal-950 text-white" : "bg-white text-teal-950 hover:bg-soft-control border border-black/10"
                         }`}
                     >
-                        Completed
+                        Completed ({counts.completedCount})
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setFilterTab("UNPAID")}
+                        className={`rounded-full px-3.5 py-1.5 text-[13px] font-bold transition-colors ${
+                            filterTab === "UNPAID" ? "bg-teal-950 text-white" : "bg-white text-teal-950 hover:bg-soft-control border border-black/10"
+                        }`}
+                    >
+                        Unpaid ({counts.unpaidCount})
                     </button>
                 </div>
 

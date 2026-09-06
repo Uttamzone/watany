@@ -94,10 +94,12 @@ export function OrderPackPanel({
             .catch(() => setSavedBoxes([]));
     }, [order.orderNumber]);
 
+    const isPaid = order.paymentStatus === "PAID" || order.paymentStatus === "CAPTURED";
     const canPack =
-        ["PROCESSING", "PACKED"].includes(order.status) ||
+        ["PROCESSING", "PACKED", "PAID"].includes(order.status) ||
+        (isPaid && order.status === "PLACED") ||
         (order.pricingGroup === "DISTRIBUTOR" &&
-            ["AWAITING_PAYMENT_VERIFICATION", "PLACED", "PENDING_PAYMENT"].includes(order.status));
+            ["AWAITING_PAYMENT_VERIFICATION", "PLACED", "PENDING_PAYMENT", "PROCESSING", "PACKED"].includes(order.status));
 
     if (!canPack) {
         return null;
@@ -202,14 +204,13 @@ export function OrderPackPanel({
     const overAllocated = order.items.some((line) => remainingFor(line.id, line.quantity) < 0);
 
     return (
-        <div className="rounded-2xl bg-white p-5 shadow-card">
+        <div id="pack" className="rounded-2xl bg-white p-5 shadow-card scroll-mt-20">
             <div className="flex items-center gap-2">
                 <Box className="size-4 text-teal-950" aria-hidden/>
-                <h2 className="text-[15px] font-bold text-teal-950">Pack order</h2>
+                <h2 className="text-[15px] font-bold text-teal-950">Pack order &amp; merge boxes</h2>
             </div>
             <p className="mt-1 text-[12px] text-muted">
-                Group items into boxes for shipping. Anything left unassigned ships as-is in its own
-                original packaging.
+                Group items into custom boxes or pallets for shipping. Anything left unassigned ships as-is in its own original packaging.
             </p>
 
             <div className="mt-4 space-y-2">
