@@ -27,7 +27,6 @@ import {
     Calendar,
     CreditCard,
     User,
-    Clock,
 } from "lucide-react";
 import * as adminApi from "@/lib/admin/api";
 import type { OrderResponse, OrderStatus } from "@/lib/admin/types";
@@ -58,8 +57,6 @@ const PAYMENT_METHOD_LABEL: Record<string, string> = {
     CHEQUE: "Pay by Cheque",
 };
 
-type OrderTab = "items" | "pack" | "ship" | "timeline";
-
 export default function AdminOrderDetailPage({
     params,
 }: {
@@ -85,9 +82,6 @@ export default function AdminOrderDetailPage({
     const [copiedAddress, setCopiedAddress] = useState(false);
     const [copiedEmail, setCopiedEmail] = useState(false);
 
-    // Active workspace tab
-    const [activeTab, setActiveTab] = useState<OrderTab>("items");
-
     // Shipping Label & BOL dialog
     const [labelDialogOpen, setLabelDialogOpen] = useState(false);
     const [labelDocType, setLabelDocType] = useState<"PARCEL" | "PALLET" | "BOL">("PARCEL");
@@ -98,18 +92,6 @@ export default function AdminOrderDetailPage({
             .then((detail) => {
                 setOrder(detail.order);
                 setCarrierCost(detail.carrierCost);
-
-                // Auto-route to most relevant tab if not set manually
-                if (typeof window !== "undefined" && window.location.hash) {
-                    const hash = window.location.hash.replace("#", "").toLowerCase();
-                    if (hash === "pack") setActiveTab("pack");
-                    else if (hash === "ship") setActiveTab("ship");
-                    else if (hash === "timeline") setActiveTab("timeline");
-                } else if (detail.order.status === "PACKED") {
-                    setActiveTab("ship");
-                } else if (detail.order.status === "SHIPPED") {
-                    setActiveTab("items");
-                }
             })
             .catch((err) => {
                 const message = err instanceof ApiError ? err.message : "Failed to load order.";
@@ -311,8 +293,8 @@ export default function AdminOrderDetailPage({
         .join(", ");
 
     return (
-        <div className="space-y-4 pb-8">
-            {/* 1. COMPACT TOP HEADER & QUICK ACTION BAR (NO SCROLL NEEDED) */}
+        <div className="w-full space-y-4 pb-12">
+            {/* 1. COMPACT TOP HEADER & QUICK ACTION BAR (USES FULL WEBPAGE WIDTH) */}
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white p-3.5 shadow-2xs border border-teal-950/10">
                 <div className="flex flex-wrap items-center gap-2.5">
                     <Link
@@ -324,30 +306,31 @@ export default function AdminOrderDetailPage({
                         Orders
                     </Link>
 
-                    <h1 className="text-[20px] sm:text-[22px] font-black text-teal-950 tracking-tight">
+                    <h1 className="text-[20px] sm:text-[24px] font-black text-teal-950 tracking-tight">
                         {order.orderNumber}
                     </h1>
 
-                    <span className="rounded-full bg-navy/10 px-2.5 py-0.5 text-[10px] font-black uppercase text-navy">
-                        {CUSTOMER_CATEGORY_LABEL[order.pricingGroup] ?? order.pricingGroup}
+                    <span className="rounded-full bg-navy/10 px-2.5 py-0.5 text-[11px] font-black uppercase text-navy">
+                        {CUSTOMER_CATEGORY_LABEL[order.pricingGroup] ?? order.pricingGroup} ACCOUNT
                     </span>
 
                     {isPaid ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-800">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-[11px] font-black uppercase text-emerald-800">
                             <span className="size-1.5 rounded-full bg-emerald-600 animate-pulse" />
                             PAID
                         </span>
                     ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-[10px] font-black uppercase text-amber-800">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-[11px] font-black uppercase text-amber-800">
                             <span className="size-1.5 rounded-full bg-amber-600" />
                             UNPAID
                         </span>
                     )}
 
                     <StatusBadge status={order.status} />
+                    <StatusBadge status={order.paymentStatus} />
                 </div>
 
-                {/* Primary Quick Actions Bar right at the top */}
+                {/* Primary Quick Actions Bar */}
                 <div className="flex flex-wrap items-center gap-2">
                     <button
                         type="button"
@@ -355,7 +338,7 @@ export default function AdminOrderDetailPage({
                             setLabelDocType(isPalletShipment ? "PALLET" : "PARCEL");
                             setLabelDialogOpen(true);
                         }}
-                        className="inline-flex items-center gap-1.5 rounded-xl bg-teal-950 px-3 py-1.5 text-[12px] font-bold text-white shadow-2xs hover:bg-teal-900 transition-colors"
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-teal-950 px-3.5 py-2 text-[12px] font-bold text-white shadow-2xs hover:bg-teal-900 transition-colors"
                     >
                         <Printer className="size-3.5" />
                         Labels &amp; BOL
@@ -365,19 +348,18 @@ export default function AdminOrderDetailPage({
                         type="button"
                         disabled={downloadingInvoice}
                         onClick={handleDownloadInvoice}
-                        className="inline-flex items-center gap-1 rounded-xl border border-black/15 bg-white px-2.5 py-1.5 text-[12px] font-bold text-teal-950 hover:bg-soft-control transition-colors disabled:opacity-60"
+                        className="inline-flex items-center gap-1 rounded-xl border border-black/15 bg-white px-3 py-2 text-[12px] font-bold text-teal-950 hover:bg-soft-control transition-colors disabled:opacity-60"
                         title="Download official commercial invoice PDF"
                     >
                         <Download className="size-3.5 text-muted" />
-                        Invoice
+                        Invoice PDF
                     </button>
 
-                    {/* Quick next status button in top bar if available */}
                     {nextStatuses.length > 0 && (
                         <button
                             type="button"
                             onClick={() => setPendingStatus(nextStatuses[0])}
-                            className="inline-flex items-center gap-1 rounded-xl bg-emerald-700 px-3 py-1.5 text-[12px] font-bold text-white hover:bg-emerald-800 transition-colors shadow-2xs"
+                            className="inline-flex items-center gap-1 rounded-xl bg-emerald-700 px-3 py-2 text-[12px] font-bold text-white hover:bg-emerald-800 transition-colors shadow-2xs"
                         >
                             Mark {nextStatuses[0].replace(/_/g, " ")}
                             <ArrowRight className="size-3" />
@@ -388,7 +370,7 @@ export default function AdminOrderDetailPage({
                         <button
                             type="button"
                             onClick={() => setMarkPaidOpen(true)}
-                            className="inline-flex items-center gap-1 rounded-xl bg-amber-600 px-2.5 py-1.5 text-[12px] font-bold text-white hover:bg-amber-700 transition-colors shadow-2xs"
+                            className="inline-flex items-center gap-1 rounded-xl bg-amber-600 px-3 py-2 text-[12px] font-bold text-white hover:bg-amber-700 transition-colors shadow-2xs"
                         >
                             <BadgeCheck className="size-3.5" /> Mark Paid
                         </button>
@@ -396,9 +378,9 @@ export default function AdminOrderDetailPage({
                 </div>
             </div>
 
-            {/* Special Notification Banner if needed */}
+            {/* Special Notification Banners */}
             {(order.paymentStatus === "REFUND_REQUIRED" || (order.status === "CANCELLED" && isPaid)) && (
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-rose-300 bg-rose-50 p-3 text-rose-950 text-[13px]">
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-rose-300 bg-rose-50 p-3 text-rose-950 text-[13px]">
                     <div className="flex items-center gap-2 font-semibold">
                         <AlertCircle className="size-4 text-rose-600" />
                         <span>Customer Cancelled Order — Refund Required ({money(order.grandTotal, order.currency)})</span>
@@ -416,14 +398,21 @@ export default function AdminOrderDetailPage({
                 </div>
             )}
 
-            {/* 2. COMPACT 3-COLUMN SUMMARY STRIP (CUSTOMER, DESTINATION, TOTALS) - ALL VISIBLE WITHOUT SCROLL */}
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {/* Column 1: Customer Info */}
-                <div className="rounded-2xl bg-white p-3.5 shadow-2xs border border-teal-950/10 flex flex-col justify-between">
+            {order.pricingGroup === "DISTRIBUTOR" && (
+                <div className="flex items-center gap-2 rounded-2xl border border-sky-200 bg-sky-50/80 p-3 text-sky-950 text-[12px]">
+                    <CheckCircle2 className="size-4 text-sky-600 shrink-0" />
+                    <span><strong>Distributor Net Terms:</strong> Bulk order eligible to pack and ship before upfront payment is verified.</span>
+                </div>
+            )}
+
+            {/* 2. TOP SUMMARY ROW (3 COMPACT COLUMNS SPANNING THE FULL WEBPAGE WIDTH) */}
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {/* Column 1: Customer Account Info */}
+                <div className="rounded-2xl bg-white p-4 shadow-2xs border border-teal-950/10 flex flex-col justify-between">
                     <div>
                         <div className="flex items-center justify-between">
                             <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted">Customer Account</span>
-                            <span className="text-[10px] font-bold text-teal-900">{PAYMENT_METHOD_LABEL[order.paymentMethod] || order.paymentMethod}</span>
+                            <span className="text-[11px] font-bold text-teal-900">{PAYMENT_METHOD_LABEL[order.paymentMethod] || order.paymentMethod}</span>
                         </div>
                         <p className="font-bold text-teal-950 text-[14px] mt-0.5 truncate">
                             {order.shippingAddress?.fullName || order.email}
@@ -438,14 +427,14 @@ export default function AdminOrderDetailPage({
                         </div>
                     </div>
                     {order.shippingAddress?.phone && (
-                        <div className="mt-1 pt-1 border-t border-black/5 text-[11px] text-muted">
+                        <div className="mt-2 pt-2 border-t border-black/5 text-[11px] text-muted">
                             Tel: <a href={`tel:${order.shippingAddress.phone}`} className="font-semibold text-teal-950">{order.shippingAddress.phone}</a>
                         </div>
                     )}
                 </div>
 
-                {/* Column 2: Delivery Destination */}
-                <div className="rounded-2xl bg-white p-3.5 shadow-2xs border border-teal-950/10 flex flex-col justify-between">
+                {/* Column 2: Delivery Destination & Method */}
+                <div className="rounded-2xl bg-white p-4 shadow-2xs border border-teal-950/10 flex flex-col justify-between">
                     <div>
                         <div className="flex items-center justify-between">
                             <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted">Shipping Destination</span>
@@ -466,7 +455,7 @@ export default function AdminOrderDetailPage({
                             <p className="text-[12px] text-muted italic mt-0.5">No shipping address recorded</p>
                         )}
                     </div>
-                    <div className="mt-1 pt-1 border-t border-black/5 flex items-center justify-between text-[11px]">
+                    <div className="mt-2 pt-2 border-t border-black/5 flex items-center justify-between text-[11px]">
                         <span className="font-bold text-teal-900 truncate">
                             {isPalletShipment ? "40×48 Pallet Freight" : "Standard Parcel"}
                         </span>
@@ -476,13 +465,13 @@ export default function AdminOrderDetailPage({
                             rel="noreferrer"
                             className="text-teal-700 hover:underline inline-flex items-center gap-0.5 font-bold"
                         >
-                            <MapPin className="size-3" /> Maps
+                            <MapPin className="size-3" /> View Map
                         </a>
                     </div>
                 </div>
 
-                {/* Column 3: Totals & Financial Verification */}
-                <div className="rounded-2xl bg-white p-3.5 shadow-2xs border border-teal-950/10 flex flex-col justify-between">
+                {/* Column 3: Totals & Financial Management */}
+                <div className="rounded-2xl bg-white p-4 shadow-2xs border border-teal-950/10 flex flex-col justify-between">
                     <div>
                         <div className="flex items-center justify-between">
                             <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted">Grand Total</span>
@@ -499,9 +488,9 @@ export default function AdminOrderDetailPage({
                             </span>
                         </div>
                     </div>
-                    <div className="mt-1 pt-1 border-t border-black/5 flex items-center justify-between text-[11px]">
+                    <div className="mt-2 pt-2 border-t border-black/5 flex items-center justify-between text-[11px]">
                         <span className="font-medium text-muted">
-                            {isPaid ? "Payment Verified" : "Payment Pending"}
+                            {isPaid ? "Payment Captured" : "Payment Pending"}
                         </span>
                         <div className="flex items-center gap-2">
                             {canMarkUnpaid && (
@@ -527,82 +516,27 @@ export default function AdminOrderDetailPage({
                 </div>
             </div>
 
-            {/* 3. OPERATIONAL WORKSPACE TABS - ZERO SCROLL FATIGUE */}
-            <div className="rounded-3xl bg-white p-4 sm:p-5 shadow-card border border-teal-950/10">
-                {/* Clean Tab Switcher Bar */}
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-black/10 pb-3">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                        <button
-                            type="button"
-                            onClick={() => setActiveTab("items")}
-                            className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[13px] font-bold transition-all ${
-                                activeTab === "items"
-                                    ? "bg-teal-950 text-white shadow-2xs"
-                                    : "bg-soft-control/60 text-teal-950 hover:bg-soft-control"
-                            }`}
-                        >
-                            <Box className="size-4" />
-                            Ordered Items ({order.items?.length || 0})
-                        </button>
+            {/* 3. MAIN WIDE WORKSPACE GRID (ALL OPTIONS VISIBLE SIDE-BY-SIDE - NO TABS) */}
+            <div className="grid gap-6 lg:grid-cols-12 items-start">
+                {/* Left Column (7 of 12 columns): Ordered Items + Box Packing + Timeline */}
+                <div className="lg:col-span-7 space-y-6">
+                    {/* Ordered Items Card */}
+                    <div className="rounded-3xl bg-white p-5 shadow-card border border-teal-950/10">
+                        <div className="flex items-center justify-between border-b border-black/5 pb-3">
+                            <div className="flex items-center gap-2">
+                                <Box className="size-4 text-teal-950" />
+                                <h2 className="text-[15px] font-extrabold text-teal-950">
+                                    Ordered Items ({order.items?.length || 0})
+                                </h2>
+                            </div>
+                            <span className="text-[12px] font-bold text-muted">
+                                Subtotal: {money(order.subtotal, order.currency)}
+                            </span>
+                        </div>
 
-                        <button
-                            type="button"
-                            onClick={() => setActiveTab("pack")}
-                            className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[13px] font-bold transition-all ${
-                                activeTab === "pack"
-                                    ? "bg-teal-950 text-white shadow-2xs"
-                                    : "bg-soft-control/60 text-teal-950 hover:bg-soft-control"
-                            }`}
-                        >
-                            <Box className="size-4" />
-                            Pack Boxes &amp; Pallets
-                            {order.status === "PACKED" || order.status === "SHIPPED" ? (
-                                <span className="size-2 rounded-full bg-emerald-500" />
-                            ) : null}
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={() => setActiveTab("ship")}
-                            className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[13px] font-bold transition-all ${
-                                activeTab === "ship"
-                                    ? "bg-teal-950 text-white shadow-2xs"
-                                    : "bg-soft-control/60 text-teal-950 hover:bg-soft-control"
-                            }`}
-                        >
-                            <Truck className="size-4" />
-                            Carrier &amp; Shipping
-                            {order.trackingNumber && (
-                                <span className="size-2 rounded-full bg-emerald-500" />
-                            )}
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={() => setActiveTab("timeline")}
-                            className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[13px] font-bold transition-all ${
-                                activeTab === "timeline"
-                                    ? "bg-teal-950 text-white shadow-2xs"
-                                    : "bg-soft-control/60 text-teal-950 hover:bg-soft-control"
-                            }`}
-                        >
-                            <ClipboardList className="size-4" />
-                            Timeline ({order.timeline?.length || 0})
-                        </button>
-                    </div>
-
-                    {/* Quick helper indicator */}
-                    <span className="text-[12px] font-semibold text-muted hidden sm:inline-block">
-                        Status: <strong className="text-teal-950">{order.status.replace(/_/g, " ")}</strong>
-                    </span>
-                </div>
-
-                {/* TAB 1: ORDERED ITEMS */}
-                {activeTab === "items" && (
-                    <div className="pt-4">
                         <div className="divide-y divide-black/5">
                             {(order.items || []).map((line) => (
-                                <div key={line.sku} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                                <div key={line.sku} className="flex items-center gap-3 py-3 first:pt-3 last:pb-0">
                                     <div className="relative size-14 shrink-0 overflow-hidden rounded-2xl bg-canvas border border-black/10">
                                         {/* eslint-disable-next-line @next/next/no-img-element */}
                                         <img
@@ -615,10 +549,10 @@ export default function AdminOrderDetailPage({
                                         />
                                     </div>
                                     <div className="min-w-0 flex-1">
-                                        <h3 className="text-[14px] font-bold text-teal-950 truncate">
+                                        <h3 className="text-[13px] font-bold text-teal-950 truncate">
                                             {line.productName}
                                         </h3>
-                                        <div className="flex flex-wrap items-center gap-2 text-[12px] text-muted mt-0.5">
+                                        <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted mt-0.5">
                                             <span className="font-mono">{line.sku}</span>
                                             <span>• Unit: <strong className="text-teal-950">{line.unit}</strong></span>
                                             <span>• Unit Price: <strong className="text-teal-950">{money(line.unitPrice, order.currency)}</strong></span>
@@ -633,86 +567,83 @@ export default function AdminOrderDetailPage({
                                         <span className="inline-block rounded-lg bg-soft-control px-2.5 py-0.5 text-[12px] font-black text-teal-950">
                                             ×{line.quantity}
                                         </span>
-                                        <p className="text-[14px] font-black text-teal-950 mt-0.5">
+                                        <p className="text-[13px] font-black text-teal-950 mt-0.5">
                                             {money(line.lineTotal, order.currency)}
                                         </p>
                                     </div>
                                 </div>
                             ))}
                         </div>
+                    </div>
 
-                        <div className="mt-4 flex flex-wrap items-center justify-between border-t border-black/5 pt-3 text-[13px]">
-                            <span className="text-muted">Need to pack this order?</span>
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab("pack")}
-                                className="inline-flex items-center gap-1 font-bold text-teal-950 hover:underline"
-                            >
-                                Open Pack Boxes Panel <ArrowRight className="size-3.5" />
-                            </button>
+                    {/* Pack Boxes & Pallets Panel (Directly visible, not hidden behind buttons) */}
+                    <OrderPackPanel order={order} onPacked={setOrder} />
+
+                    {/* Order Activity Timeline (Directly visible below packing) */}
+                    <div className="rounded-3xl bg-white p-5 shadow-card border border-teal-950/10">
+                        <div className="flex items-center gap-2 border-b border-black/5 pb-3">
+                            <ClipboardList className="size-4 text-teal-950" aria-hidden />
+                            <h2 className="text-[15px] font-extrabold text-teal-950">Order Activity Timeline</h2>
+                        </div>
+                        <div className="mt-4">
+                            <OrderTimeline events={order.timeline || []} />
                         </div>
                     </div>
-                )}
-
-                {/* TAB 2: PACK BOXES & PALLETS */}
-                {activeTab === "pack" && (
-                    <div className="pt-2">
-                        <OrderPackPanel
-                            order={order}
-                            onPacked={(updated) => {
-                                setOrder(updated);
-                                setActiveTab("ship"); // automatically step forward to shipping upon saving packing!
-                            }}
-                        />
-                    </div>
-                )}
-
-                {/* TAB 3: CARRIER BOOKING & SHIPPING */}
-                {activeTab === "ship" && (
-                    <div className="pt-2">
-                        <OrderShipPanel
-                            order={order}
-                            carrierCost={carrierCost}
-                            onBooked={(detail) => {
-                                setOrder(detail.order);
-                                setCarrierCost(detail.carrierCost);
-                            }}
-                        />
-                    </div>
-                )}
-
-                {/* TAB 4: ORDER ACTIVITY TIMELINE */}
-                {activeTab === "timeline" && (
-                    <div className="pt-4">
-                        <OrderTimeline events={order.timeline || []} />
-                    </div>
-                )}
-            </div>
-
-            {/* 4. COMPACT FOOTER ACTIONS (STATUS TRANSITIONS & DANGER ZONE) */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-                <div className="flex flex-wrap items-center gap-2">
-                    {nextStatuses.map((status) => (
-                        <button
-                            key={status}
-                            type="button"
-                            onClick={() => setPendingStatus(status)}
-                            className="inline-flex items-center gap-1 rounded-xl border border-black/15 bg-white px-3 py-1.5 text-[12px] font-bold text-teal-950 hover:bg-soft-control transition-colors shadow-2xs"
-                        >
-                            Mark as {status.replace(/_/g, " ")}
-                            <ArrowRight className="size-3 text-muted" />
-                        </button>
-                    ))}
                 </div>
 
-                <button
-                    type="button"
-                    onClick={() => setDeleteOpen(true)}
-                    className="inline-flex items-center gap-1 rounded-xl border border-coral/30 px-3 py-1.5 text-[12px] font-bold text-coral hover:bg-coral/10 transition-colors"
-                >
-                    <Trash2 className="size-3" />
-                    Delete Order
-                </button>
+                {/* Right Column (5 of 12 columns): Shipping Fulfillment Panel + Status Actions */}
+                <div className="lg:col-span-5 space-y-6">
+                    {/* Carrier Shipping Panel (Directly visible right alongside items/packing) */}
+                    <OrderShipPanel
+                        order={order}
+                        carrierCost={carrierCost}
+                        onBooked={(detail) => {
+                            setOrder(detail.order);
+                            setCarrierCost(detail.carrierCost);
+                        }}
+                    />
+
+                    {/* Order Status Workflow Transitions */}
+                    {nextStatuses.length > 0 && (
+                        <div className="rounded-3xl bg-white p-5 shadow-card border border-teal-950/10">
+                            <h2 className="text-[14px] font-bold text-teal-950">Status Transitions</h2>
+                            <p className="mt-1 text-[12px] text-muted">Currently {order.status.replace(/_/g, " ").toLowerCase()}.</p>
+                            <div className="mt-3 space-y-2">
+                                {nextStatuses.map((status, index) => (
+                                    <button
+                                        key={status}
+                                        type="button"
+                                        onClick={() => setPendingStatus(status)}
+                                        className={`flex h-10 w-full items-center justify-between rounded-xl px-4 text-[12px] font-bold transition-colors ${
+                                            index === 0
+                                                ? "bg-teal-950 text-white hover:bg-teal-900 shadow-2xs"
+                                                : "bg-soft-control text-teal-950 hover:bg-black/5"
+                                        }`}
+                                    >
+                                        Mark as {status.replace(/_/g, " ")}
+                                        <ArrowRight className="size-3.5" aria-hidden />
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Danger Zone: Delete Order */}
+                    <div className="rounded-3xl bg-white p-4 shadow-card border border-coral/20 flex items-center justify-between gap-3">
+                        <div>
+                            <span className="text-[13px] font-bold text-coral block">Delete Order Record</span>
+                            <span className="text-[11px] text-muted">Permanently removes this order.</span>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setDeleteOpen(true)}
+                            className="inline-flex items-center gap-1 rounded-xl bg-coral/10 px-3 py-1.5 text-[12px] font-bold text-coral hover:bg-coral hover:text-white transition-colors cursor-pointer"
+                        >
+                            <Trash2 className="size-3.5" />
+                            Delete
+                        </button>
+                    </div>
+                </div>
             </div>
 
             {/* DIALOGS */}

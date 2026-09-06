@@ -81,7 +81,12 @@ export function OrderShipPanel({
         setCustomTrackingUrl(order.trackingUrl || "");
     }, [order.trackingNumber, order.trackingUrl]);
 
-    if (order.status !== "PACKED" && !order.trackingNumber) {
+    const canShip =
+        ["PROCESSING", "PACKED", "SHIPPED", "DELIVERED", "COMPLETED", "PAID"].includes(order.status) ||
+        Boolean(order.trackingNumber) ||
+        (order.pricingGroup === "DISTRIBUTOR" && ["AWAITING_PAYMENT_VERIFICATION", "PLACED", "PENDING_PAYMENT"].includes(order.status));
+
+    if (!canShip) {
         return (
             <div id="ship" className="rounded-2xl bg-white p-5 shadow-card border border-dashed border-black/15 scroll-mt-20">
                 <div className="flex items-center gap-2">
@@ -89,7 +94,7 @@ export function OrderShipPanel({
                     <h2 className="text-[15px] font-bold text-teal-950">Shipping &amp; carrier booking</h2>
                 </div>
                 <p className="mt-2 text-[12px] text-muted leading-relaxed">
-                    Once you save packing in the <strong>Pack order &amp; merge boxes</strong> panel, this section unlocks to record carrier tracking numbers and book the shipment.
+                    Once the order is verified and ready for fulfillment, this section unlocks to record carrier tracking numbers and book the shipment.
                 </p>
             </div>
         );

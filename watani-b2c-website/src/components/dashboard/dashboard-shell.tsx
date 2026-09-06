@@ -262,7 +262,7 @@ export function DashboardShell({children}: { children: React.ReactNode }) {
                 </div>
 
                 <main className="min-w-0 flex-1 overflow-y-auto bg-canvas p-4 sm:p-6 lg:p-8 print:p-0 print:bg-white print:overflow-visible print:m-0">
-                    <div className="mx-auto max-w-6xl print:max-w-none print:w-full">{children}</div>
+                    <div className="w-full mx-auto print:max-w-none print:w-full">{children}</div>
                 </main>
             </div>
         </div>
