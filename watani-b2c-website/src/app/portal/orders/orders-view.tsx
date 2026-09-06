@@ -177,11 +177,9 @@ export function OrdersView() {
                                                 return (
                                                     <div key={item.id ?? idx} className="rounded-xl border border-teal-950/10 bg-teal-950/[0.02] p-2.5 text-xs text-teal-950">
                                                         <p className="font-bold truncate text-teal-950 mb-1">{item.productName}</p>
-                                                        <div className="space-y-0.5 text-[11px] font-semibold text-teal-950">
-                                                            <div>Moq {item.quantity || 1}</div>
-                                                            <div>Unit {item.unit || "unit"}</div>
-                                                            <div>Price ( retail) :${safeFormatPrice(retPrice)}</div>
-                                                            <div>Price (wholesale) :${safeFormatPrice(wsPrice)}</div>
+                                                        <div className="flex items-center justify-between text-[11px] text-muted font-medium">
+                                                            <span>{item.unit || "Unit"} · Qty: {item.quantity || 1}</span>
+                                                            <span className="font-bold text-teal-950">${safeFormatPrice(uPrice)}</span>
                                                         </div>
                                                     </div>
                                                 );
