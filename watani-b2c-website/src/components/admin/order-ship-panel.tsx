@@ -1,7 +1,7 @@
 "use client";
 
-import {useState} from "react";
-import {PackageCheck, Trash2, Truck} from "lucide-react";
+import {useState, useEffect} from "react";
+import {Check, Copy, ExternalLink, PackageCheck, Pencil, Trash2, Truck} from "lucide-react";
 import * as adminApi from "@/lib/admin/api";
 import type {AdminOrderDetail, OrderResponse, ShippingRateOption} from "@/lib/admin/types";
 import {ApiError} from "@/lib/api";
@@ -12,15 +12,35 @@ function money(value: number, currency: string) {
     return new Intl.NumberFormat("en-CA", {style: "currency", currency}).format(value);
 }
 
-/**
- * Rate-shop and book a shipment from an order's saved fulfillment boxes.
- * Only reachable once the order is PACKED - the backend enforces this too.
- */
+const CARRIER_PRESETS = [
+    { label: "Canada Post (via Freightcom)", name: "Canada Post via Freightcom" },
+    { label: "Purolator (via Freightcom)", name: "Purolator via Freightcom" },
+    { label: "UPS (via Freightcom)", name: "UPS via Freightcom" },
+    { label: "FedEx (via Freightcom)", name: "FedEx via Freightcom" },
+    { label: "Day & Ross LTL (via Freightcom)", name: "Day & Ross LTL" },
+    { label: "Freightcom Skid / Pallet", name: "Freightcom Pallet Delivery" },
+    { label: "Other / Custom Carrier", name: "Other" },
+];
+
+function buildTrackingUrl(carrier: string, tracking: string): string {
+    const trk = tracking.trim();
+    if (!trk) return "";
+    const cUpper = carrier.toUpperCase();
+    const enc = encodeURIComponent(trk);
+    if (cUpper.includes("PUROLATOR")) return `https://www.purolator.com/en/shipping/tracker?pins=${enc}`;
+    if (cUpper.includes("UPS")) return `https://www.ups.com/track?tracknum=${enc}`;
+    if (cUpper.includes("FEDEX")) return `https://www.fedex.com/fedextrack/?trknbr=${enc}`;
+    if (cUpper.includes("DAY") || cUpper.includes("ROSS")) return `https://dayross.com/tracking?proNumber=${enc}`;
+    if (cUpper.includes("POST") || cUpper.includes("CANADA")) return `https://www.canadapost-postescanada.ca/track-reperage/en#/details/${enc}`;
+    if (cUpper.includes("FREIGHTCOM")) return `https://track.freightcom.com/track/${enc}`;
+    return `https://www.canadapost-postescanada.ca/track-reperage/en#/details/${enc}`;
+}
+
 export function OrderShipPanel({
-                                    order,
-                                    carrierCost,
-                                    onBooked,
-                                }: {
+    order,
+    carrierCost,
+    onBooked,
+}: {
     order: OrderResponse;
     /** Currently recorded carrier cost, if a shipment was already booked - shown for context only. */
     carrierCost: number | null;
@@ -34,6 +54,19 @@ export function OrderShipPanel({
     const [cancelling, setCancelling] = useState(false);
     const [cancelOpen, setCancelOpen] = useState(false);
 
+    // Custom Tracking Entry state
+    const [carrierPreset, setCarrierPreset] = useState<string>("Canada Post (via Freightcom)");
+    const [customCarrier, setCustomCarrier] = useState<string>("");
+    const [trackingNumber, setTrackingNumber] = useState<string>(order.trackingNumber || "");
+    const [customTrackingUrl, setCustomTrackingUrl] = useState<string>(order.trackingUrl || "");
+    const [isEditingTracking, setIsEditingTracking] = useState(false);
+    const [copied, setCopied] = useState(false);
+
+    useEffect(() => {
+        setTrackingNumber(order.trackingNumber || "");
+        setCustomTrackingUrl(order.trackingUrl || "");
+    }, [order.trackingNumber, order.trackingUrl]);
+
     if (order.status !== "PACKED" && !order.trackingNumber) {
         return (
             <div id="ship" className="rounded-2xl bg-white p-5 shadow-card border border-dashed border-black/15 scroll-mt-20">
@@ -42,10 +75,52 @@ export function OrderShipPanel({
                     <h2 className="text-[15px] font-bold text-teal-950">Shipping &amp; carrier booking</h2>
                 </div>
                 <p className="mt-2 text-[12px] text-muted leading-relaxed">
-                    Once you save packing in the <strong>Pack order &amp; merge boxes</strong> panel, this section unlocks to calculate carrier rates and book the shipment with tracking.
+                    Once you save packing in the <strong>Pack order &amp; merge boxes</strong> panel, this section unlocks to record carrier tracking numbers and book the shipment.
                 </p>
             </div>
         );
+    }
+
+    function copyShippingInfo() {
+        const addr = order.shippingAddress;
+        const lines = [
+            `Recipient: ${addr?.fullName || order.email}`,
+            `Address: ${addr?.line1 || ""}`,
+            `City: ${addr?.city || ""}, ${addr?.region || ""} ${addr?.postalCode || ""}`,
+            `Country: ${addr?.country || "CA"}`,
+            `Customer Email: ${order.email || ""}`,
+            `Order #: ${order.orderNumber}`
+        ];
+        navigator.clipboard.writeText(lines.join("\n"));
+        setCopied(true);
+        notifications.success("Copied to clipboard", "Recipient address ready to paste into Freightcom.");
+        setTimeout(() => setCopied(false), 3000);
+    }
+
+    async function handleSaveTracking() {
+        const trk = trackingNumber.trim();
+        if (!trk) {
+            notifications.error("Tracking number required", "Please enter the tracking number provided by Freightcom.");
+            return;
+        }
+        setBooking(true);
+        try {
+            const finalCarrier = carrierPreset === "Other" ? (customCarrier.trim() || "Carrier") : carrierPreset;
+            const finalTrackingUrl = customTrackingUrl.trim() || buildTrackingUrl(finalCarrier, trk);
+
+            const updated = await adminApi.bookShipment(order.orderNumber, {
+                carrierName: finalCarrier,
+                trackingNumber: trk,
+                trackingUrl: finalTrackingUrl,
+            });
+            onBooked(updated);
+            setIsEditingTracking(false);
+            notifications.success("Shipment Recorded", `Order marked as shipped with tracking (${finalCarrier}).`);
+        } catch (err) {
+            notifications.error("Saving tracking failed", err instanceof ApiError ? err.message : "Saving tracking failed.");
+        } finally {
+            setBooking(false);
+        }
     }
 
     async function getRates() {
@@ -63,13 +138,14 @@ export function OrderShipPanel({
         }
     }
 
-    async function book() {
+    async function bookWithQuotedRate() {
         if (!selected) return;
         setBooking(true);
         try {
             const selectedRate = rates?.find((rate) => rate.serviceCode === selected);
             const updated = await adminApi.bookShipment(order.orderNumber, {
                 serviceCode: selected,
+                carrierName: selectedRate?.carrierName,
                 carrierCost: selectedRate?.carrierCost,
                 packagingType: selectedRate?.packagingType,
             });
@@ -89,7 +165,10 @@ export function OrderShipPanel({
             onBooked(updated);
             setRates(null);
             setSelected(null);
-            notifications.success("Shipment cancelled", "Shipment voided; the order can be re-quoted and rebooked.");
+            setTrackingNumber("");
+            setCustomTrackingUrl("");
+            setIsEditingTracking(false);
+            notifications.success("Shipment cancelled", "Shipment voided; the order can be re-quoted or rebooked.");
         } catch (err) {
             notifications.error("Cancelling shipment failed", err instanceof ApiError ? err.message : "Cancelling shipment failed.");
         } finally {
@@ -100,70 +179,210 @@ export function OrderShipPanel({
 
     return (
         <div id="ship" className="rounded-2xl bg-white p-5 shadow-card scroll-mt-20">
-            <div className="flex items-center gap-2">
-                <Truck className="size-4 text-teal-950" aria-hidden/>
-                <h2 className="text-[15px] font-bold text-teal-950">Shipping & tracking</h2>
+            <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                    <Truck className="size-4 text-teal-950" aria-hidden/>
+                    <h2 className="text-[15px] font-bold text-teal-950">Shipping &amp; Carrier Fulfillment</h2>
+                </div>
+                <a
+                    href="https://app.freightcom.com"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 rounded-full bg-soft-control border border-black/10 px-2.5 py-1 text-[11px] font-bold text-teal-950 hover:bg-black/5"
+                >
+                    <ExternalLink className="size-3" />
+                    Open Freightcom
+                </a>
             </div>
 
-            {order.trackingNumber ? (
-                <dl className="mt-3 space-y-1.5 text-[13px]">
-                    <div className="flex justify-between gap-3">
-                        <dt className="text-muted">Carrier</dt>
-                        <dd className="text-right font-semibold text-teal-950">{order.carrierName ?? "—"}</dd>
-                    </div>
-                    {order.shippingMethod && (
-                        <div className="flex justify-between gap-3">
-                            <dt className="text-muted">Service</dt>
-                            <dd className="text-right text-teal-950">{order.shippingMethod}</dd>
-                        </div>
-                    )}
-                    <div className="flex justify-between gap-3">
-                        <dt className="text-muted">Tracking #</dt>
-                        <dd className="text-right font-semibold text-teal-950">
-                            {order.trackingUrl ? (
-                                <a
-                                    href={order.trackingUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="underline decoration-dotted underline-offset-2 hover:text-coral"
-                                >
-                                    {order.trackingNumber}
-                                </a>
-                            ) : (
-                                order.trackingNumber
-                            )}
-                        </dd>
-                    </div>
-                    {carrierCost !== null && (
-                        <div className="flex justify-between gap-3">
-                            <dt className="text-muted">Carrier cost (internal)</dt>
-                            <dd className="text-right text-teal-950">{money(carrierCost, order.currency)}</dd>
-                        </div>
-                    )}
-                </dl>
-            ) : (
-                <>
-                    <p className="mt-2 text-[12px] text-muted">
-                        Order is packed. Get a live rate, then book the shipment.
-                    </p>
-
+            {/* Freightcom Fast-Copy Helper */}
+            <div className="mt-3 rounded-xl bg-soft-control/60 border border-black/5 p-3">
+                <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-muted">Freightcom Booking Details</span>
                     <button
                         type="button"
-                        disabled={quoting}
-                        onClick={getRates}
-                        className="mt-3 h-10 w-full rounded-xl bg-soft-control text-[13px] font-bold text-teal-950 transition-colors hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-40"
+                        onClick={copyShippingInfo}
+                        className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[11px] font-semibold text-teal-950 shadow-xs hover:bg-soft-control"
                     >
-                        {quoting ? "Getting rates…" : "Get shipping rates"}
+                        {copied ? <Check className="size-3 text-emerald-600" /> : <Copy className="size-3 text-muted" />}
+                        {copied ? "Copied!" : "Copy Address"}
                     </button>
+                </div>
+                <p className="mt-1 text-[12px] text-teal-950 font-medium">
+                    {order.shippingAddress?.fullName} — {order.shippingAddress?.line1}, {order.shippingAddress?.city}, {order.shippingAddress?.region} {order.shippingAddress?.postalCode}
+                </p>
+                <p className="mt-0.5 text-[11px] text-muted">
+                    Method: <strong className="text-teal-950">{order.shippingMethod || "Standard Shipping"}</strong>
+                </p>
+            </div>
 
-                    {rates && rates.length === 0 && (
-                        <p className="mt-2 text-[12px] text-coral">No rates returned. Try again shortly.</p>
-                    )}
+            {/* Already Shipped view (when not in edit mode) */}
+            {order.trackingNumber && !isEditingTracking ? (
+                <div className="mt-4">
+                    <dl className="space-y-2 text-[13px]">
+                        <div className="flex justify-between gap-3 border-b border-black/5 pb-1.5">
+                            <dt className="text-muted">Carrier</dt>
+                            <dd className="text-right font-semibold text-teal-950">{order.carrierName ?? "Freightcom Carrier"}</dd>
+                        </div>
+                        <div className="flex justify-between gap-3 border-b border-black/5 pb-1.5">
+                            <dt className="text-muted">Tracking Number</dt>
+                            <dd className="text-right font-mono font-bold text-teal-950">
+                                {order.trackingUrl ? (
+                                    <a
+                                        href={order.trackingUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="inline-flex items-center gap-1 text-teal-700 underline underline-offset-2 hover:text-teal-900"
+                                    >
+                                        {order.trackingNumber}
+                                        <ExternalLink className="size-3" />
+                                    </a>
+                                ) : (
+                                    order.trackingNumber
+                                )}
+                            </dd>
+                        </div>
+                        {carrierCost !== null && (
+                            <div className="flex justify-between gap-3 border-b border-black/5 pb-1.5">
+                                <dt className="text-muted">Carrier Cost (internal)</dt>
+                                <dd className="text-right text-teal-950">{money(carrierCost, order.currency)}</dd>
+                            </div>
+                        )}
+                    </dl>
 
-                    {rates && rates.length > 0 && (
-                        <div className="mt-3">
-                            {/* Roughly 3 rows visible; the rest scrolls within the panel instead of growing it. */}
-                            <div className="max-h-[168px] space-y-1.5 overflow-y-auto pr-1">
+                    <div className="mt-4 flex items-center gap-2">
+                        {order.trackingUrl && (
+                            <a
+                                href={order.trackingUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl bg-teal-950 text-[13px] font-bold text-white shadow-xs transition-colors hover:bg-teal-900"
+                            >
+                                <PackageCheck className="size-4" aria-hidden/>
+                                Track Shipment
+                            </a>
+                        )}
+                        <button
+                            type="button"
+                            onClick={() => setIsEditingTracking(true)}
+                            className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-black/15 bg-white px-3 text-[13px] font-bold text-teal-950 shadow-xs transition-colors hover:bg-soft-control"
+                        >
+                            <Pencil className="size-3.5 text-muted" />
+                            Edit Tracking
+                        </button>
+                        <button
+                            type="button"
+                            title="Cancel/void shipment"
+                            aria-label="Cancel/void shipment"
+                            disabled={cancelling}
+                            onClick={() => setCancelOpen(true)}
+                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-coral/30 text-coral transition-colors hover:bg-coral/10 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                            <Trash2 className="size-4" aria-hidden/>
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                /* Tracking Entry / Edit Form */
+                <div className="mt-4 space-y-3">
+                    <p className="text-[12px] text-muted">
+                        After booking your shipment on <strong>Freightcom</strong>, enter the carrier and tracking number below to notify the customer and mark the order as shipped:
+                    </p>
+
+                    <div>
+                        <label className="block text-[12px] font-bold text-teal-950 mb-1">
+                            Carrier
+                        </label>
+                        <select
+                            value={carrierPreset}
+                            onChange={(e) => {
+                                setCarrierPreset(e.target.value);
+                                if (trackingNumber.trim()) {
+                                    setCustomTrackingUrl(buildTrackingUrl(e.target.value, trackingNumber.trim()));
+                                }
+                            }}
+                            className="h-10 w-full rounded-xl border border-black/15 bg-white px-3 text-[13px] text-teal-950 focus:border-teal-950 focus:outline-none"
+                        >
+                            {CARRIER_PRESETS.map((cp) => (
+                                <option key={cp.label} value={cp.name}>
+                                    {cp.label}
+                                </option>
+                            ))}
+                        </select>
+                        {carrierPreset === "Other" && (
+                            <input
+                                type="text"
+                                placeholder="Enter custom carrier name"
+                                value={customCarrier}
+                                onChange={(e) => setCustomCarrier(e.target.value)}
+                                className="mt-2 h-10 w-full rounded-xl border border-black/15 bg-white px-3 text-[13px] text-teal-950 focus:border-teal-950 focus:outline-none"
+                            />
+                        )}
+                    </div>
+
+                    <div>
+                        <label className="block text-[12px] font-bold text-teal-950 mb-1">
+                            Tracking Number / PRO #
+                        </label>
+                        <input
+                            type="text"
+                            placeholder="e.g. 123456789012 or PRO-987654"
+                            value={trackingNumber}
+                            onChange={(e) => {
+                                setTrackingNumber(e.target.value);
+                                setCustomTrackingUrl(buildTrackingUrl(carrierPreset === "Other" ? customCarrier : carrierPreset, e.target.value));
+                            }}
+                            className="h-10 w-full rounded-xl border border-black/15 bg-white px-3 font-mono text-[13px] text-teal-950 focus:border-teal-950 focus:outline-none"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-[12px] font-bold text-teal-950 mb-1">
+                            Tracking Link (auto-generated)
+                        </label>
+                        <input
+                            type="url"
+                            placeholder="https://..."
+                            value={customTrackingUrl}
+                            onChange={(e) => setCustomTrackingUrl(e.target.value)}
+                            className="h-10 w-full rounded-xl border border-black/15 bg-white px-3 text-[12px] text-muted focus:border-teal-950 focus:outline-none"
+                        />
+                    </div>
+
+                    <div className="pt-1 flex items-center gap-2">
+                        <button
+                            type="button"
+                            disabled={booking || !trackingNumber.trim()}
+                            onClick={handleSaveTracking}
+                            className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl bg-teal-950 text-[13px] font-bold text-white shadow-xs transition-colors hover:bg-teal-900 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                            <Truck className="size-4" />
+                            {booking ? "Saving…" : order.trackingNumber ? "Update Tracking" : "Mark as Shipped & Save Tracking"}
+                        </button>
+                        {isEditingTracking && (
+                            <button
+                                type="button"
+                                onClick={() => setIsEditingTracking(false)}
+                                className="h-10 rounded-xl border border-black/15 px-3 text-[13px] font-bold text-muted hover:bg-soft-control"
+                            >
+                                Cancel
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Optional: Live rate estimation fallback */}
+                    <div className="mt-4 border-t border-black/5 pt-3">
+                        <button
+                            type="button"
+                            disabled={quoting}
+                            onClick={getRates}
+                            className="text-[12px] font-semibold text-muted hover:text-teal-950 underline"
+                        >
+                            {quoting ? "Calculating rates…" : "Optional: Get live estimated carrier rates"}
+                        </button>
+
+                        {rates && rates.length > 0 && (
+                            <div className="mt-2 space-y-1.5">
                                 {rates.map((rate) => (
                                     <label
                                         key={rate.serviceCode}
@@ -178,83 +397,30 @@ export function OrderShipPanel({
                                                 type="radio"
                                                 name="shipping-rate"
                                                 checked={selected === rate.serviceCode}
-                                                onChange={() => setSelected(rate.serviceCode)}
+                                                onChange={() => {
+                                                    setSelected(rate.serviceCode);
+                                                    setCarrierPreset(rate.carrierName);
+                                                }}
                                             />
-                                            <span>
-                                                <span className="flex items-center gap-1.5">
-                                                    <span className="font-semibold text-teal-950">
-                                                        {rate.carrierName} · {rate.serviceName}
-                                                    </span>
-                                                    <span
-                                                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
-                                                            rate.packagingType === "PALLET"
-                                                                ? "bg-amber-100 text-amber-800"
-                                                                : "bg-sky-100 text-sky-800"
-                                                        }`}
-                                                    >
-                                                        {rate.packagingType === "PALLET" ? "Pallet" : "Parcel"}
-                                                    </span>
-                                                </span>
-                                                {rate.etaDays != null && (
-                                                    <span className="text-[11px] text-muted">~{rate.etaDays} day(s)</span>
-                                                )}
+                                            <span className="font-semibold text-teal-950">
+                                                {rate.carrierName} · {rate.serviceName}
                                             </span>
                                         </span>
-                                        <span className="shrink-0 text-right">
-                                            <span className="block font-bold text-teal-950">
-                                                {money(rate.cost, order.currency)}
-                                            </span>
-                                            <span className="block text-[11px] text-muted">
-                                                cost: {money(rate.carrierCost, order.currency)}
-                                            </span>
+                                        <span className="font-bold text-teal-950">
+                                            {money(rate.carrierCost, order.currency)}
                                         </span>
                                     </label>
                                 ))}
                             </div>
-
-                            <button
-                                type="button"
-                                disabled={booking || !selected}
-                                onClick={book}
-                                className="mt-2 h-10 w-full rounded-xl bg-teal-950 text-[13px] font-bold text-white transition-colors hover:bg-teal-900 disabled:cursor-not-allowed disabled:opacity-40"
-                            >
-                                {booking ? "Booking…" : "Book shipment"}
-                            </button>
-                        </div>
-                    )}
-                </>
-            )}
-
-            {order.trackingNumber && (
-                <div className="mt-3 flex items-center gap-2">
-                    {order.labelUrl && (
-                        <a
-                            href={order.labelUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl bg-soft-control text-[13px] font-bold text-teal-950 transition-colors hover:bg-black/5"
-                        >
-                            <PackageCheck className="size-4" aria-hidden/>
-                            View shipping label
-                        </a>
-                    )}
-                    <button
-                        type="button"
-                        title="Cancel/void shipment"
-                        aria-label="Cancel/void shipment"
-                        disabled={cancelling}
-                        onClick={() => setCancelOpen(true)}
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-coral/30 text-coral transition-colors hover:bg-coral/10 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                        <Trash2 className="size-4" aria-hidden/>
-                    </button>
+                        )}
+                    </div>
                 </div>
             )}
 
             <ConfirmDialog
                 open={cancelOpen}
                 title="Cancel/void this shipment?"
-                description="Cancels the shipment and tracking with the carrier. The order returns to a rebook-ready state so you can get fresh rates and book again."
+                description="Cancels tracking and reverts this order status back to Packed so you can re-enter or book a different shipment."
                 confirmLabel={cancelling ? "Cancelling…" : "Cancel shipment"}
                 danger
                 onCancel={() => setCancelOpen(false)}

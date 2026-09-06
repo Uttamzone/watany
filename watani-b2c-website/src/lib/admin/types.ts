@@ -421,6 +421,9 @@ export type BookShipmentRequest = {
     carrierCost?: number | null;
     /** Packaging type the selected rate was quoted under; must match on booking. */
     packagingType?: PackagingType | null;
+    carrierName?: string | null;
+    trackingNumber?: string | null;
+    trackingUrl?: string | null;
 };
 
 // Fulfillment / packing - mirrors AdminDtos order-box records.

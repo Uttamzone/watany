@@ -1780,11 +1780,12 @@ export function bookShipment(orderNumber: string, payload: BookShipmentRequest):
         () => {
             const match = stateOrders.find(o => o.orderNumber === orderNumber) ?? stateOrders[0];
             match.status = "SHIPPED";
-            match.trackingNumber = "7038192049182";
-            match.carrierName = payload.serviceCode?.startsWith("CP") ? "Canada Post" : "UPS";
+            match.trackingNumber = payload.trackingNumber || "7038192049182";
+            match.carrierName = payload.carrierName || (payload.serviceCode?.startsWith("CP") ? "Canada Post via Freightcom" : "Freightcom Direct");
+            match.trackingUrl = payload.trackingUrl || `https://www.canadapost-postescanada.ca/track-reperage/en#/details/${match.trackingNumber}`;
             match.timeline.push({
                 status: "SHIPPED",
-                message: `Booked shipment with ${match.carrierName} - Tracking: ${match.trackingNumber}`,
+                message: `Shipment recorded with ${match.carrierName} - Tracking: ${match.trackingNumber}`,
                 at: new Date().toISOString()
             });
             persistOrdersState();

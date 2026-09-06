@@ -2278,8 +2278,32 @@ async function getOrderRates(req, res) {
 async function bookOrderShipment(req, res) {
     try {
         const { orderNumber } = req.params;
-        const { carrierName = 'Freightcom', trackingNumber = `TRK-${Date.now()}` } = req.body;
-        const trackingUrl = `https://www.canadapost-postescanada.ca/track-reperage/en#/details/${trackingNumber}`;
+        let { carrierName, trackingNumber, trackingUrl, carrierCost } = req.body || {};
+
+        carrierName = (carrierName && carrierName.trim()) ? carrierName.trim() : 'Freightcom';
+        trackingNumber = (trackingNumber && trackingNumber.trim()) ? trackingNumber.trim() : `TRK-${Date.now()}`;
+
+        if (!trackingUrl || !trackingUrl.trim()) {
+            const cUpper = carrierName.toUpperCase();
+            const trkEncoded = encodeURIComponent(trackingNumber);
+            if (cUpper.includes('PUROLATOR')) {
+                trackingUrl = `https://www.purolator.com/en/shipping/tracker?pins=${trkEncoded}`;
+            } else if (cUpper.includes('UPS')) {
+                trackingUrl = `https://www.ups.com/track?tracknum=${trkEncoded}`;
+            } else if (cUpper.includes('FEDEX')) {
+                trackingUrl = `https://www.fedex.com/fedextrack/?trknbr=${trkEncoded}`;
+            } else if (cUpper.includes('DAY') || cUpper.includes('ROSS')) {
+                trackingUrl = `https://dayross.com/tracking?proNumber=${trkEncoded}`;
+            } else if (cUpper.includes('POST') || cUpper.includes('CANADA')) {
+                trackingUrl = `https://www.canadapost-postescanada.ca/track-reperage/en#/details/${trkEncoded}`;
+            } else if (cUpper.includes('FREIGHTCOM')) {
+                trackingUrl = `https://track.freightcom.com/track/${trkEncoded}`;
+            } else {
+                trackingUrl = `https://www.canadapost-postescanada.ca/track-reperage/en#/details/${trkEncoded}`;
+            }
+        } else {
+            trackingUrl = trackingUrl.trim();
+        }
 
         const { rows } = await db.query(`
             UPDATE orders
@@ -2301,7 +2325,7 @@ async function bookOrderShipment(req, res) {
 
         return res.json({
             order: formatOrderRow(rows[0], itemsRes.rows),
-            carrierCost: 18.50
+            carrierCost: carrierCost !== undefined ? carrierCost : 18.50
         });
     } catch (err) {
         return res.status(500).json({ error: 'Internal Server Error', message: err.message });
