@@ -29,21 +29,24 @@ type TabKey = "description" | "additional" | "reviews" | "shipping";
 
 export function ProductTabs({
                                 product,
-                                reviews,
+                                reviews = [],
                                 descriptionHtml,
                                 shippingHtml,
                             }: {
     product: Product;
-    reviews: ProductReview[];
+    reviews?: ProductReview[];
     /** Pre-sanitised long-form description markup. */
     descriptionHtml: string;
     /** Pre-sanitised shipping policy markup. */
     shippingHtml: string;
 }) {
-    const [reviewList, setReviewList] = useState<ProductReview[]>(reviews);
+    const safeInitialReviews = Array.isArray(reviews) ? reviews : [];
+    const [reviewList, setReviewList] = useState<ProductReview[]>(safeInitialReviews);
 
     useEffect(() => {
-        setReviewList(reviews);
+        if (Array.isArray(reviews)) {
+            setReviewList(reviews);
+        }
     }, [reviews]);
 
     const specs = specRows(product);
@@ -53,11 +56,11 @@ export function ProductTabs({
         ...(specs.length > 0
             ? [{key: "additional" as const, label: "Additional information"}]
             : []),
-        {key: "reviews", label: `Reviews (${reviewList.length})`},
+        {key: "reviews", label: `Reviews (${(reviewList || []).length})`},
         ...(shippingHtml ? [{key: "shipping" as const, label: "Shipping & Delivery"}] : []),
     ];
 
-    const [active, setActive] = useState<TabKey>(tabs[0].key);
+    const [active, setActive] = useState<TabKey>(tabs[0]?.key || "reviews");
     const reduceMotion = useReducedMotion();
     const baseId = useId();
     const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -215,14 +218,21 @@ function AdditionalPanel({rows}: { rows: SpecRow[] }) {
 
 function ReviewsPanel({
                           product,
-                          reviews,
+                          reviews = [],
                           onReviewAdded,
                       }: {
     product: Product;
-    reviews: ProductReview[];
+    reviews?: ProductReview[];
     onReviewAdded: (newReview: ProductReview) => void;
 }) {
-    const { user } = useAuth();
+    const safeReviews = Array.isArray(reviews) ? reviews : [];
+    let user = null;
+    try {
+        const auth = useAuth();
+        user = auth?.user ?? null;
+    } catch {
+        // Safe fallback if rendered without AuthProvider
+    }
     const [isWriting, setIsWriting] = useState(false);
     const [rating, setRating] = useState(5);
     const [hoverRating, setHoverRating] = useState(0);
@@ -243,8 +253,11 @@ function ReviewsPanel({
     }, [user, authorName]);
 
     const average =
-        reviews.length > 0
-            ? reviews.reduce((total, review) => total + review.rating, 0) / reviews.length
+        safeReviews.length > 0
+            ? safeReviews.reduce((total, rev) => {
+                const r = typeof rev?.rating === "number" ? rev.rating : parseFloat(String(rev?.rating || 0)) || 0;
+                return total + r;
+              }, 0) / safeReviews.length
             : 5;
 
     const ratingDescriptions = ["", "1 - Poor", "2 - Fair", "3 - Average", "4 - Very Good", "5 - Excellent"];
@@ -592,18 +605,19 @@ function ShippingPanel({html}: { html: string }) {
 
 /* ------------------------------------------------------------------ */
 
-function Stars({rating, className = ""}: { rating: number; className?: string }) {
+function Stars({rating, className = ""}: { rating?: number | null; className?: string }) {
+    const num = typeof rating === "number" && !isNaN(rating) ? rating : 5;
     return (
         <div
             className={`flex items-center gap-0.5 ${className}`}
             role="img"
-            aria-label={`${rating.toFixed(1)} out of 5 stars`}
+            aria-label={`${num.toFixed(1)} out of 5 stars`}
         >
             {[1, 2, 3, 4, 5].map((position) => (
                 <Star
                     key={position}
                     className={`size-4 ${
-                        position <= Math.round(rating)
+                        position <= Math.round(num)
                             ? "fill-gold text-gold"
                             : "fill-black/[0.08] text-black/[0.08]"
                     }`}
@@ -616,6 +630,7 @@ function Stars({rating, className = ""}: { rating: number; className?: string })
 
 /** Builds "Additional information" rows, skipping unknown fields so none show blank. */
 function specRows(product: Product): SpecRow[] {
+    if (!product) return [];
     const specs = product.specifications;
     const rows: SpecRow[] = [];
 

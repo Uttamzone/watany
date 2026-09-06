@@ -162,7 +162,16 @@ async function getProducts(req, res) {
 
 async function getProductBySlug(req, res) {
     try {
-        const { slug } = req.params;
+        let { slug } = req.params;
+        if (!slug) {
+            return res.status(400).json({ error: 'Bad Request', message: 'Slug is required' });
+        }
+        try {
+            slug = decodeURIComponent(slug).trim();
+        } catch {
+            slug = String(slug).trim();
+        }
+
         const buyerGroup = req.user ? req.user.pricingGroup : 'RETAIL';
 
         const { rows } = await db.query(`
@@ -174,7 +183,7 @@ async function getProductBySlug(req, res) {
             FROM products
             LEFT JOIN categories ON products.category_id = categories.id
             LEFT JOIN brands ON products.brand_id = brands.id
-            WHERE products.slug = $1 AND products.active = TRUE;
+            WHERE (LOWER(products.slug) = LOWER($1) OR products.id::text = $1) AND (products.active IS NOT FALSE);
         `, [slug]);
 
         if (rows.length === 0) {
@@ -265,10 +274,128 @@ async function getProductBySlug(req, res) {
     }
 }
 
+async function getRelatedProducts(req, res) {
+    try {
+        let { slug } = req.params;
+        if (!slug) return res.json([]);
+        try {
+            slug = decodeURIComponent(slug).trim();
+        } catch {
+            slug = String(slug).trim();
+        }
+
+        const limit = Math.max(1, Math.min(20, parseInt(req.query.limit, 10) || 5));
+        const buyerGroup = req.user ? req.user.pricingGroup : 'RETAIL';
+
+        // First find current product
+        const pRes = await db.query(`
+            SELECT products.id, products.category_id, categories.slug as category
+            FROM products
+            LEFT JOIN categories ON products.category_id = categories.id
+            WHERE (LOWER(products.slug) = LOWER($1) OR products.id::text = $1)
+            LIMIT 1;
+        `, [slug]);
+
+        let productRows = [];
+        let currentId = null;
+        if (pRes.rows.length > 0) {
+            const current = pRes.rows[0];
+            currentId = current.id;
+            const relatedRes = await db.query(`
+                SELECT products.id, products.slug, products.name, products.full_name as "fullName",
+                       products.subtitle, products.description, categories.slug as category,
+                       products.badge, products.rating_average as rating, products.review_count as "reviewCount",
+                       products.region, products.material, products.color
+                FROM products
+                LEFT JOIN categories ON products.category_id = categories.id
+                WHERE products.category_id = $1 AND products.id != $2 AND (products.active IS NOT FALSE)
+                ORDER BY products.id ASC
+                LIMIT $3;
+            `, [current.category_id, current.id, limit]);
+            productRows = relatedRes.rows;
+        }
+
+        // If not enough related in the same category, grab other active products
+        if (productRows.length < limit) {
+            const excludeIds = currentId ? [currentId, ...productRows.map(p => p.id)] : productRows.map(p => p.id);
+            const remaining = limit - productRows.length;
+            const extraRes = await db.query(`
+                SELECT products.id, products.slug, products.name, products.full_name as "fullName",
+                       products.subtitle, products.description, categories.slug as category,
+                       products.badge, products.rating_average as rating, products.review_count as "reviewCount",
+                       products.region, products.material, products.color
+                FROM products
+                LEFT JOIN categories ON products.category_id = categories.id
+                WHERE (products.id != ALL($1::int[])) AND (products.active IS NOT FALSE)
+                ORDER BY products.id ASC
+                LIMIT $2;
+            `, [excludeIds.length > 0 ? excludeIds : [0], remaining]);
+            productRows.push(...extraRes.rows);
+        }
+
+        const content = [];
+        for (const p of productRows) {
+            const varRes = await db.query('SELECT id, sku, unit, stock_quantity as "stockQuantity", active FROM product_variants WHERE product_id = $1 ORDER BY active DESC, id ASC LIMIT 1', [p.id]);
+            const defaultVariant = varRes.rows[0] || { id: p.id, sku: `SKU-${p.id}`, unit: 'unit', stockQuantity: 0, active: false };
+
+            const imgRes = await db.query('SELECT url FROM product_images WHERE product_id = $1 ORDER BY display_order ASC LIMIT 1', [p.id]);
+            const image = imgRes.rows[0] ? imgRes.rows[0].url : '/logo/watany-logo.png';
+
+            const priceInfo = await resolvePrice(defaultVariant.id, buyerGroup, 1);
+            const priceVal = typeof priceInfo.price === 'number' ? priceInfo.price : 25.00;
+            const priceMajor = String(priceInfo.priceMajor || Math.floor(priceVal));
+            const priceMinor = String(priceInfo.priceMinor || '00');
+
+            content.push({
+                id: p.id,
+                defaultVariantId: defaultVariant.id,
+                slug: p.slug,
+                name: p.name,
+                fullName: p.fullName || p.name,
+                subtitle: p.subtitle,
+                unit: defaultVariant.unit || 'unit',
+                sku: defaultVariant.sku || `SKU-${p.id}`,
+                category: p.category || 'olive-oil',
+                badge: p.badge,
+                image,
+                description: p.description,
+                priceMajor,
+                priceMinor,
+                compareAtMajor: priceInfo.compareAtMajor,
+                compareAtMinor: priceInfo.compareAtMinor,
+                price: priceInfo.price,
+                rating: p.rating ? parseFloat(p.rating) : 5.0,
+                reviewCount: p.reviewCount || 0,
+                region: p.region,
+                material: p.material,
+                color: p.color,
+                inStock: Boolean((defaultVariant.stockQuantity || 0) > 0 && defaultVariant.active !== false),
+                minQuantity: priceInfo.pricingRelation?.minQuantity || 1,
+                minimumOrderQuantity: priceInfo.pricingRelation?.minimumOrderQuantity || 1,
+                retailPrice: priceInfo.pricingRelation?.retailPrice,
+                wholesalePrice: priceInfo.pricingRelation?.wholesalePrice,
+                pricing: priceInfo.pricingRelation
+            });
+        }
+
+        return res.json(content);
+    } catch (err) {
+        console.error('[getRelatedProducts error]:', err);
+        return res.json([]);
+    }
+}
+
 async function getProductReviews(req, res) {
     try {
-        const { slug } = req.params;
-        const pRes = await db.query('SELECT id, name FROM products WHERE slug = $1 OR id::text = $1 LIMIT 1', [slug]);
+        let { slug } = req.params;
+        if (!slug) return res.json([]);
+        try {
+            slug = decodeURIComponent(slug).trim();
+        } catch {
+            slug = String(slug).trim();
+        }
+
+        const pRes = await db.query('SELECT id, name FROM products WHERE LOWER(slug) = LOWER($1) OR id::text = $1 LIMIT 1', [slug]);
         if (pRes.rows.length === 0) {
             return res.json([]);
         }
@@ -290,11 +417,18 @@ async function getProductReviews(req, res) {
 
 async function createProductReview(req, res) {
     try {
-        const { slug } = req.params;
+        let { slug } = req.params;
         const { rating, title, body, authorName } = req.body || {};
         const numRating = Math.max(1, Math.min(5, parseInt(rating, 10) || 5));
 
-        const pRes = await db.query('SELECT id, name FROM products WHERE slug = $1 OR id::text = $1 LIMIT 1', [slug]);
+        if (!slug) return res.status(400).json({ error: 'Bad Request', message: 'Slug is required' });
+        try {
+            slug = decodeURIComponent(slug).trim();
+        } catch {
+            slug = String(slug).trim();
+        }
+
+        const pRes = await db.query('SELECT id, name FROM products WHERE LOWER(slug) = LOWER($1) OR id::text = $1 LIMIT 1', [slug]);
         if (pRes.rows.length === 0) {
             return res.status(404).json({ error: 'Not Found', message: 'Product not found' });
         }
@@ -318,15 +452,17 @@ async function createProductReview(req, res) {
 
         try {
             const statRes = await db.query(`
-                SELECT COALESCE(AVG(rating), 5.0) as avg, COUNT(*) as cnt
+                SELECT COUNT(id) as count, AVG(rating) as avg
                 FROM reviews
-                WHERE product_id = $1 AND status = 'APPROVED';
+                WHERE product_id = $1 AND status = 'APPROVED'
             `, [product.id]);
-            if (statRes.rows.length > 0) {
-                const avgRating = parseFloat(statRes.rows[0].avg).toFixed(1);
-                const reviewCount = parseInt(statRes.rows[0].cnt, 10);
-                await db.query(`UPDATE products SET rating_average = $1, review_count = $2 WHERE id = $3`, [avgRating, reviewCount, product.id]);
-            }
+            const count = parseInt(statRes.rows[0]?.count || 0, 10);
+            const avg = parseFloat(statRes.rows[0]?.avg || 5.0);
+            await db.query(`
+                UPDATE products
+                SET rating_average = $1, review_count = $2, updated_at = NOW()
+                WHERE id = $3
+            `, [avg, count, product.id]);
         } catch (e) {
             console.warn('[recalculateRating error]:', e.message);
         }
@@ -342,6 +478,7 @@ module.exports = {
     getCategories,
     getProducts,
     getProductBySlug,
+    getRelatedProducts,
     getProductReviews,
     createProductReview
 };

@@ -35,9 +35,10 @@ mapRoute('post', ['/v1/auth/logout', '/auth/logout'], auth.logout);
 /* Catalogue Routes */
 mapRoute('get', ['/v1/categories', '/catalogue/categories'], catalogue.getCategories);
 mapRoute('get', ['/v1/products', '/catalogue/products'], optionalAuth, catalogue.getProducts);
-mapRoute('get', ['/v1/products/:slug', '/catalogue/products/:slug'], optionalAuth, catalogue.getProductBySlug);
+mapRoute('get', ['/v1/catalogue/products/:slug/related', '/catalogue/products/:slug/related', '/v1/products/:slug/related', '/products/:slug/related'], optionalAuth, catalogue.getRelatedProducts);
 mapRoute('get', ['/v1/catalogue/products/:slug/reviews', '/catalogue/products/:slug/reviews', '/v1/products/:slug/reviews', '/products/:slug/reviews'], catalogue.getProductReviews);
 mapRoute('post', ['/v1/catalogue/products/:slug/reviews', '/catalogue/products/:slug/reviews', '/v1/products/:slug/reviews', '/products/:slug/reviews'], reviewRateLimiter, optionalAuth, catalogue.createProductReview);
+mapRoute('get', ['/v1/products/:slug', '/catalogue/products/:slug'], optionalAuth, catalogue.getProductBySlug);
 
 /* Public Order Reviews */
 mapRoute('get', ['/v1/reviews/order/:orderNumber', '/reviews/order/:orderNumber'], misc.getOrderReviewSummary);

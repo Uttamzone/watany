@@ -133,10 +133,27 @@ export function ProductImageManager({
 
     async function handleSetDefault(imageId: number) {
         if (!slug) return;
+        const currentList = Array.isArray(images) ? images : [];
         try {
             const response = await adminApi.setDefaultProductImage(slug, imageId);
-            onImagesChange(response.images);
+            if (response && Array.isArray((response as any).images) && (response as any).images.length > 0) {
+                onImagesChange((response as any).images);
+            } else {
+                onImagesChange(
+                    currentList.map((img) => ({
+                        ...img,
+                        isDefault: img.id === imageId,
+                    }))
+                );
+            }
+            notifications.success("Image set as default", "The primary product image has been updated.");
         } catch (err) {
+            onImagesChange(
+                currentList.map((img) => ({
+                    ...img,
+                    isDefault: img.id === imageId,
+                }))
+            );
             notifications.error(
                 "Failed to set default image",
                 err instanceof ApiError ? err.message : "Failed to set default image.",
@@ -147,9 +164,10 @@ export function ProductImageManager({
     async function handleDelete(imageId: number) {
         if (!slug) return;
         if (!window.confirm("Delete this image?")) return;
+        const currentList = Array.isArray(images) ? images : [];
         try {
             await adminApi.deleteProductImage(slug, imageId);
-            onImagesChange(images.filter((image) => image.id !== imageId));
+            onImagesChange(currentList.filter((image) => image.id !== imageId));
         } catch (err) {
             notifications.error(
                 "Failed to delete image",
@@ -157,6 +175,8 @@ export function ProductImageManager({
             );
         }
     }
+
+    const safeImages = Array.isArray(images) ? images : [];
 
     return (
         <div className="rounded-2xl bg-white p-5 shadow-card">
@@ -179,11 +199,11 @@ export function ProductImageManager({
                 />
             </div>
 
-            {images.length === 0 ? (
+            {safeImages.length === 0 ? (
                 <p className="mt-3 text-[13px] text-muted">No images yet.</p>
             ) : (
                 <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    {images.map((image) => (
+                    {safeImages.map((image) => (
                         <div key={image.id}
                              className="group relative overflow-hidden rounded-xl border border-black/10">
                             <div className="relative aspect-square bg-soft-control">

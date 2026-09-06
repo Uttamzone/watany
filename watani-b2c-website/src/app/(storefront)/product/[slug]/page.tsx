@@ -70,10 +70,13 @@ export default async function ProductDetailPage(
 
     // Independent reads, so they go out together rather than in series.
     const [related, reviews, shippingPolicy] = await Promise.all([
-        getRelatedProducts(product),
-        getProductReviews(slug),
-        getShippingPolicy(),
+        getRelatedProducts(product).catch(() => []),
+        getProductReviews(product.slug || decodeURIComponent(slug)).catch(() => []),
+        getShippingPolicy().catch(() => null),
     ]);
+
+    const safeReviews = Array.isArray(reviews) ? reviews : [];
+    const safeRelated = Array.isArray(related) ? related : [];
 
     // Sanitised here, on the server, so the client component only ever receives
     // markup that is already safe to hand to dangerouslySetInnerHTML.
@@ -84,7 +87,8 @@ export default async function ProductDetailPage(
 
     const categoryName =
         categories.find((category) => category.slug === product.category)?.name ??
-        product.category;
+        product.category ??
+        "Catalogue";
 
     // Product structured data - requirement.md F-CAT-9.
     const jsonLd = {
@@ -105,22 +109,22 @@ export default async function ProductDetailPage(
             ? {
                 aggregateRating: {
                     "@type": "AggregateRating",
-                    ratingValue: product.rating,
-                    reviewCount: product.reviewCount,
+                    ratingValue: typeof product.rating === "number" ? product.rating : 5,
+                    reviewCount: typeof product.reviewCount === "number" ? product.reviewCount : 0,
                 },
             }
             : {}),
         // Individual reviews, so search engines can show the same feedback the
         // Reviews tab does rather than only the aggregate (F-CAT-9).
-        ...(reviews.length > 0
+        ...(safeReviews.length > 0
             ? {
-                review: reviews.map((review) => ({
+                review: safeReviews.map((review) => ({
                     "@type": "Review",
-                    author: {"@type": "Person", name: review.authorName},
-                    datePublished: review.createdAt,
+                    author: {"@type": "Person", name: review.authorName || "Customer"},
+                    datePublished: review.createdAt || new Date().toISOString(),
                     reviewRating: {
                         "@type": "Rating",
-                        ratingValue: review.rating,
+                        ratingValue: typeof review.rating === "number" ? review.rating : 5,
                         bestRating: 5,
                     },
                     ...(review.title ? {name: review.title} : {}),
@@ -170,15 +174,15 @@ export default async function ProductDetailPage(
 
             <ProductTabs
                 product={product}
-                reviews={reviews}
+                reviews={safeReviews}
                 descriptionHtml={descriptionHtml}
                 shippingHtml={shippingHtml}
             />
 
-            {related.length > 0 && (
+            {safeRelated.length > 0 && (
                 <ProductSection
                     title="You might also like"
-                    products={related}
+                    products={safeRelated}
                     seeMoreHref={`/categories?category=${product.category || ""}`}
                     headingId="related-products"
                 />

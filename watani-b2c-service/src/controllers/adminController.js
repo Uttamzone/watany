@@ -1380,12 +1380,16 @@ async function setDefaultProductImage(req, res) {
     try {
         const slugParam = decodeURIComponent(req.params.slug);
         const { imageId } = req.params;
-        const pRes = await db.query('SELECT id FROM products WHERE LOWER(slug) = LOWER($1) LIMIT 1', [slugParam]);
+        const pRes = await db.query('SELECT id FROM products WHERE LOWER(slug) = LOWER($1) OR id::text = $1 LIMIT 1', [slugParam]);
+        let images = [];
         if (pRes.rows.length > 0) {
-            await db.query('UPDATE product_images SET display_order = 1 WHERE product_id = $1', [pRes.rows[0].id]);
+            const productId = pRes.rows[0].id;
+            await db.query('UPDATE product_images SET display_order = 1 WHERE product_id = $1', [productId]);
             await db.query('UPDATE product_images SET display_order = 0 WHERE id = $1', [imageId]);
+            const imgRes = await db.query('SELECT id, url, alt_text as "altText", display_order as "displayOrder" FROM product_images WHERE product_id = $1 ORDER BY display_order ASC', [productId]);
+            images = imgRes.rows.map(img => ({ ...img, isDefault: img.displayOrder === 0 }));
         }
-        return res.json({ success: true });
+        return res.json({ success: true, images });
     } catch (err) {
         return res.status(500).json({ error: 'Internal Server Error', message: err.message });
     }
