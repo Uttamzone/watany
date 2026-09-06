@@ -26,9 +26,8 @@ import {
     Phone,
     Calendar,
     CreditCard,
-    ChevronRight,
     User,
-    PackageCheck,
+    Clock,
 } from "lucide-react";
 import * as adminApi from "@/lib/admin/api";
 import type { OrderResponse, OrderStatus } from "@/lib/admin/types";
@@ -59,6 +58,8 @@ const PAYMENT_METHOD_LABEL: Record<string, string> = {
     CHEQUE: "Pay by Cheque",
 };
 
+type OrderTab = "items" | "pack" | "ship" | "timeline";
+
 export default function AdminOrderDetailPage({
     params,
 }: {
@@ -84,6 +85,9 @@ export default function AdminOrderDetailPage({
     const [copiedAddress, setCopiedAddress] = useState(false);
     const [copiedEmail, setCopiedEmail] = useState(false);
 
+    // Active workspace tab
+    const [activeTab, setActiveTab] = useState<OrderTab>("items");
+
     // Shipping Label & BOL dialog
     const [labelDialogOpen, setLabelDialogOpen] = useState(false);
     const [labelDocType, setLabelDocType] = useState<"PARCEL" | "PALLET" | "BOL">("PARCEL");
@@ -94,6 +98,18 @@ export default function AdminOrderDetailPage({
             .then((detail) => {
                 setOrder(detail.order);
                 setCarrierCost(detail.carrierCost);
+
+                // Auto-route to most relevant tab if not set manually
+                if (typeof window !== "undefined" && window.location.hash) {
+                    const hash = window.location.hash.replace("#", "").toLowerCase();
+                    if (hash === "pack") setActiveTab("pack");
+                    else if (hash === "ship") setActiveTab("ship");
+                    else if (hash === "timeline") setActiveTab("timeline");
+                } else if (detail.order.status === "PACKED") {
+                    setActiveTab("ship");
+                } else if (detail.order.status === "SHIPPED") {
+                    setActiveTab("items");
+                }
             })
             .catch((err) => {
                 const message = err instanceof ApiError ? err.message : "Failed to load order.";
@@ -284,12 +300,6 @@ export default function AdminOrderDetailPage({
         order.pricingGroup === "DISTRIBUTOR" ||
         order.shippingTotal >= 140;
 
-    // Stepper logic
-    const isPlaced = true;
-    const isPaymentDone = isPaid || order.pricingGroup === "DISTRIBUTOR";
-    const isPacked = ["PACKED", "SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED"].includes(order.status);
-    const isShipped = ["SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED"].includes(order.status);
-
     const fullAddressText = [
         order.shippingAddress?.line1,
         order.shippingAddress?.city,
@@ -301,186 +311,97 @@ export default function AdminOrderDetailPage({
         .join(", ");
 
     return (
-        <div className="space-y-6 pb-12">
-            {/* Top Navigation & Action Command Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-4">
-                <Link
-                    href="/admin/orders"
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-black/10 bg-white px-3 py-1.5 text-[13px] font-bold text-teal-950 shadow-2xs hover:bg-soft-control transition-colors"
-                >
-                    <ArrowLeft className="size-4" aria-hidden />
-                    All Orders
-                </Link>
-
-                <div className="flex flex-wrap items-center gap-2">
-                    <button
-                        type="button"
-                        disabled={downloadingInvoice}
-                        onClick={handleDownloadInvoice}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-black/15 bg-white px-3.5 py-2 text-[13px] font-bold text-teal-950 shadow-2xs hover:bg-soft-control transition-colors disabled:opacity-60"
+        <div className="space-y-4 pb-8">
+            {/* 1. COMPACT TOP HEADER & QUICK ACTION BAR (NO SCROLL NEEDED) */}
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white p-3.5 shadow-2xs border border-teal-950/10">
+                <div className="flex flex-wrap items-center gap-2.5">
+                    <Link
+                        href="/admin/orders"
+                        className="inline-flex items-center gap-1 rounded-xl border border-black/10 bg-soft-control/60 px-2.5 py-1.5 text-[12px] font-bold text-teal-950 hover:bg-soft-control transition-colors"
+                        title="Back to orders list"
                     >
-                        <Download className="size-4 text-muted" />
-                        {downloadingInvoice ? "Generating…" : "Invoice PDF"}
-                    </button>
+                        <ArrowLeft className="size-3.5" />
+                        Orders
+                    </Link>
 
+                    <h1 className="text-[20px] sm:text-[22px] font-black text-teal-950 tracking-tight">
+                        {order.orderNumber}
+                    </h1>
+
+                    <span className="rounded-full bg-navy/10 px-2.5 py-0.5 text-[10px] font-black uppercase text-navy">
+                        {CUSTOMER_CATEGORY_LABEL[order.pricingGroup] ?? order.pricingGroup}
+                    </span>
+
+                    {isPaid ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-800">
+                            <span className="size-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                            PAID
+                        </span>
+                    ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-[10px] font-black uppercase text-amber-800">
+                            <span className="size-1.5 rounded-full bg-amber-600" />
+                            UNPAID
+                        </span>
+                    )}
+
+                    <StatusBadge status={order.status} />
+                </div>
+
+                {/* Primary Quick Actions Bar right at the top */}
+                <div className="flex flex-wrap items-center gap-2">
                     <button
                         type="button"
                         onClick={() => {
                             setLabelDocType(isPalletShipment ? "PALLET" : "PARCEL");
                             setLabelDialogOpen(true);
                         }}
-                        className="inline-flex items-center gap-1.5 rounded-xl bg-teal-950 px-4 py-2 text-[13px] font-bold text-white shadow-2xs hover:bg-teal-900 transition-colors"
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-teal-950 px-3 py-1.5 text-[12px] font-bold text-white shadow-2xs hover:bg-teal-900 transition-colors"
                     >
-                        <Printer className="size-4" />
-                        Shipping Labels &amp; BOL
+                        <Printer className="size-3.5" />
+                        Labels &amp; BOL
                     </button>
+
+                    <button
+                        type="button"
+                        disabled={downloadingInvoice}
+                        onClick={handleDownloadInvoice}
+                        className="inline-flex items-center gap-1 rounded-xl border border-black/15 bg-white px-2.5 py-1.5 text-[12px] font-bold text-teal-950 hover:bg-soft-control transition-colors disabled:opacity-60"
+                        title="Download official commercial invoice PDF"
+                    >
+                        <Download className="size-3.5 text-muted" />
+                        Invoice
+                    </button>
+
+                    {/* Quick next status button in top bar if available */}
+                    {nextStatuses.length > 0 && (
+                        <button
+                            type="button"
+                            onClick={() => setPendingStatus(nextStatuses[0])}
+                            className="inline-flex items-center gap-1 rounded-xl bg-emerald-700 px-3 py-1.5 text-[12px] font-bold text-white hover:bg-emerald-800 transition-colors shadow-2xs"
+                        >
+                            Mark {nextStatuses[0].replace(/_/g, " ")}
+                            <ArrowRight className="size-3" />
+                        </button>
+                    )}
+
+                    {canMarkPaid && (
+                        <button
+                            type="button"
+                            onClick={() => setMarkPaidOpen(true)}
+                            className="inline-flex items-center gap-1 rounded-xl bg-amber-600 px-2.5 py-1.5 text-[12px] font-bold text-white hover:bg-amber-700 transition-colors shadow-2xs"
+                        >
+                            <BadgeCheck className="size-3.5" /> Mark Paid
+                        </button>
+                    )}
                 </div>
             </div>
 
-            {/* Order Header Card */}
-            <div className="rounded-3xl bg-white p-6 shadow-card border border-teal-950/10">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div>
-                        <div className="flex flex-wrap items-center gap-3">
-                            <h1 className="text-[26px] sm:text-[30px] font-black text-teal-950 tracking-tight">
-                                {order.orderNumber}
-                            </h1>
-                            <span className="inline-flex items-center rounded-full bg-navy/10 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-navy">
-                                {CUSTOMER_CATEGORY_LABEL[order.pricingGroup] ?? order.pricingGroup} ACCOUNT
-                            </span>
-                            {isPaid ? (
-                                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-emerald-800 shadow-2xs">
-                                    <span className="size-2 rounded-full bg-emerald-600 animate-pulse" />
-                                    PAID
-                                </span>
-                            ) : (
-                                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-amber-800 shadow-2xs">
-                                    <span className="size-2 rounded-full bg-amber-600" />
-                                    UNPAID
-                                </span>
-                            )}
-                            <StatusBadge status={order.status} />
-                            <StatusBadge status={order.paymentStatus} />
-                        </div>
-
-                        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-muted">
-                            <span className="inline-flex items-center gap-1">
-                                <Calendar className="size-3.5" />
-                                Placed {new Date(order.placedAt).toLocaleString("en-CA", { dateStyle: "medium", timeStyle: "short" })}
-                            </span>
-                            <span>•</span>
-                            <span className="inline-flex items-center gap-1">
-                                <CreditCard className="size-3.5" />
-                                {PAYMENT_METHOD_LABEL[order.paymentMethod] ?? order.paymentMethod}
-                            </span>
-                            <span>•</span>
-                            <span className="font-bold text-teal-950">
-                                {order.items?.length || 0} Line Item{(order.items?.length || 0) === 1 ? "" : "s"}
-                            </span>
-                        </div>
-                    </div>
-
-                    <div className="text-right">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-muted">Total Amount</span>
-                        <p className="text-[28px] font-black text-teal-950">
-                            {money(order.grandTotal, order.currency)}
-                        </p>
-                    </div>
-                </div>
-
-                {/* 4-Step Visual Workflow Stepper */}
-                <div className="mt-6 border-t border-black/5 pt-6">
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                        {/* Step 1: Placed */}
-                        <div className={`rounded-2xl p-3 border transition-all ${
-                            isPlaced
-                                ? "border-emerald-500/30 bg-emerald-50/50 text-emerald-950"
-                                : "border-black/5 bg-soft-control/40 text-muted"
-                        }`}>
-                            <div className="flex items-center gap-2">
-                                <CheckCircle2 className={`size-4 ${isPlaced ? "text-emerald-600" : "text-muted"}`} />
-                                <span className="text-[12px] font-extrabold uppercase tracking-wide">1. Placed</span>
-                            </div>
-                            <p className="text-[11px] mt-1 text-muted">Customer checkout confirmed</p>
-                        </div>
-
-                        {/* Step 2: Payment */}
-                        <div className={`rounded-2xl p-3 border transition-all ${
-                            isPaymentDone
-                                ? "border-emerald-500/30 bg-emerald-50/50 text-emerald-950"
-                                : "border-amber-500/30 bg-amber-50/60 text-amber-950"
-                        }`}>
-                            <div className="flex items-center gap-2">
-                                {isPaymentDone ? (
-                                    <CheckCircle2 className="size-4 text-emerald-600" />
-                                ) : (
-                                    <span className="size-4 rounded-full bg-amber-500/20 text-amber-800 flex items-center justify-center text-[10px] font-black">2</span>
-                                )}
-                                <span className="text-[12px] font-extrabold uppercase tracking-wide">2. Payment</span>
-                            </div>
-                            <p className="text-[11px] mt-1">
-                                {isPaid ? "Payment captured" : order.pricingGroup === "DISTRIBUTOR" ? "Pay later (Net terms)" : "Verification pending"}
-                            </p>
-                        </div>
-
-                        {/* Step 3: Packing */}
-                        <div className={`rounded-2xl p-3 border transition-all ${
-                            isPacked
-                                ? "border-emerald-500/30 bg-emerald-50/50 text-emerald-950"
-                                : isPaymentDone
-                                    ? "border-teal-950/30 bg-teal-50/60 text-teal-950"
-                                    : "border-black/5 bg-soft-control/40 text-muted"
-                        }`}>
-                            <div className="flex items-center gap-2">
-                                {isPacked ? (
-                                    <CheckCircle2 className="size-4 text-emerald-600" />
-                                ) : (
-                                    <span className="size-4 rounded-full bg-teal-950/10 text-teal-950 flex items-center justify-center text-[10px] font-black">3</span>
-                                )}
-                                <span className="text-[12px] font-extrabold uppercase tracking-wide">3. Packing</span>
-                            </div>
-                            <p className="text-[11px] mt-1">
-                                {isPacked ? "Boxes packed" : "Pack items into boxes"}
-                            </p>
-                        </div>
-
-                        {/* Step 4: Shipping */}
-                        <div className={`rounded-2xl p-3 border transition-all ${
-                            isShipped
-                                ? "border-emerald-500/30 bg-emerald-50/50 text-emerald-950"
-                                : isPacked
-                                    ? "border-teal-950/30 bg-teal-50/60 text-teal-950"
-                                    : "border-black/5 bg-soft-control/40 text-muted"
-                        }`}>
-                            <div className="flex items-center gap-2">
-                                {isShipped ? (
-                                    <CheckCircle2 className="size-4 text-emerald-600" />
-                                ) : (
-                                    <span className="size-4 rounded-full bg-black/10 text-black flex items-center justify-center text-[10px] font-black">4</span>
-                                )}
-                                <span className="text-[12px] font-extrabold uppercase tracking-wide">4. Shipped</span>
-                            </div>
-                            <p className="text-[11px] mt-1">
-                                {isShipped ? order.trackingNumber ? "Tracking active" : "Dispatched" : "Awaiting carrier"}
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Special Notification Banners */}
+            {/* Special Notification Banner if needed */}
             {(order.paymentStatus === "REFUND_REQUIRED" || (order.status === "CANCELLED" && isPaid)) && (
-                <div className="flex flex-col gap-3 rounded-2xl border border-rose-300 bg-rose-50 p-4 text-rose-950 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-3">
-                        <AlertCircle className="size-6 shrink-0 text-rose-600" aria-hidden />
-                        <div>
-                            <p className="text-[14px] font-bold text-rose-900">
-                                Customer Cancelled Order — Refund Required ({money(order.grandTotal, order.currency)})
-                            </p>
-                            <p className="text-[12px] text-rose-700">
-                                This order was cancelled by the customer after payment was captured. Please process a refund.
-                            </p>
-                        </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-rose-300 bg-rose-50 p-3 text-rose-950 text-[13px]">
+                    <div className="flex items-center gap-2 font-semibold">
+                        <AlertCircle className="size-4 text-rose-600" />
+                        <span>Customer Cancelled Order — Refund Required ({money(order.grandTotal, order.currency)})</span>
                     </div>
                     <button
                         type="button"
@@ -488,61 +409,201 @@ export default function AdminOrderDetailPage({
                             setRefundAmount(String(order.grandTotal));
                             setRefundOpen(true);
                         }}
-                        className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-rose-600 px-4 py-2 text-[13px] font-bold text-white shadow-2xs transition-colors hover:bg-rose-700"
+                        className="rounded-lg bg-rose-600 px-3 py-1 text-[11px] font-bold text-white hover:bg-rose-700"
                     >
-                        <RotateCcw className="size-3.5" />
-                        Issue Full Refund
+                        Issue Refund
                     </button>
                 </div>
             )}
 
-            {order.pricingGroup === "DISTRIBUTOR" && (
-                <div className="flex items-start gap-3 rounded-2xl border border-sky-200 bg-sky-50/80 p-4 text-sky-950">
-                    <CheckCircle2 className="size-5 shrink-0 text-sky-600 mt-0.5" aria-hidden />
-                    <div className="text-[13px] leading-relaxed">
-                        <span className="font-bold">Distributor Account (Pay Later Terms):</span>{" "}
-                        Distributors purchase in bulk and pay later via e-transfer or cheque. This order is eligible to be packed and shipped immediately prior to upfront payment verification.
+            {/* 2. COMPACT 3-COLUMN SUMMARY STRIP (CUSTOMER, DESTINATION, TOTALS) - ALL VISIBLE WITHOUT SCROLL */}
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {/* Column 1: Customer Info */}
+                <div className="rounded-2xl bg-white p-3.5 shadow-2xs border border-teal-950/10 flex flex-col justify-between">
+                    <div>
+                        <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted">Customer Account</span>
+                            <span className="text-[10px] font-bold text-teal-900">{PAYMENT_METHOD_LABEL[order.paymentMethod] || order.paymentMethod}</span>
+                        </div>
+                        <p className="font-bold text-teal-950 text-[14px] mt-0.5 truncate">
+                            {order.shippingAddress?.fullName || order.email}
+                        </p>
+                        <div className="flex items-center justify-between text-[12px] mt-1 text-muted">
+                            <a href={`mailto:${order.email}`} className="truncate hover:underline text-teal-800">
+                                {order.email}
+                            </a>
+                            <button type="button" onClick={copyCustomerEmail} title="Copy email" className="p-0.5 text-muted hover:text-teal-950">
+                                {copiedEmail ? <Check className="size-3 text-emerald-600" /> : <Copy className="size-3" />}
+                            </button>
+                        </div>
+                    </div>
+                    {order.shippingAddress?.phone && (
+                        <div className="mt-1 pt-1 border-t border-black/5 text-[11px] text-muted">
+                            Tel: <a href={`tel:${order.shippingAddress.phone}`} className="font-semibold text-teal-950">{order.shippingAddress.phone}</a>
+                        </div>
+                    )}
+                </div>
+
+                {/* Column 2: Delivery Destination */}
+                <div className="rounded-2xl bg-white p-3.5 shadow-2xs border border-teal-950/10 flex flex-col justify-between">
+                    <div>
+                        <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted">Shipping Destination</span>
+                            <button
+                                type="button"
+                                onClick={copyShippingAddress}
+                                className="inline-flex items-center gap-1 text-[10px] font-bold text-teal-800 hover:underline"
+                            >
+                                {copiedAddress ? <Check className="size-3 text-emerald-600" /> : <Copy className="size-3" />}
+                                {copiedAddress ? "Copied" : "Copy"}
+                            </button>
+                        </div>
+                        {order.shippingAddress ? (
+                            <p className="text-[12px] font-medium text-teal-950 mt-0.5 leading-snug line-clamp-2">
+                                {order.shippingAddress.line1}, {order.shippingAddress.city}, {order.shippingAddress.region} {order.shippingAddress.postalCode}
+                            </p>
+                        ) : (
+                            <p className="text-[12px] text-muted italic mt-0.5">No shipping address recorded</p>
+                        )}
+                    </div>
+                    <div className="mt-1 pt-1 border-t border-black/5 flex items-center justify-between text-[11px]">
+                        <span className="font-bold text-teal-900 truncate">
+                            {isPalletShipment ? "40×48 Pallet Freight" : "Standard Parcel"}
+                        </span>
+                        <a
+                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddressText)}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-teal-700 hover:underline inline-flex items-center gap-0.5 font-bold"
+                        >
+                            <MapPin className="size-3" /> Maps
+                        </a>
                     </div>
                 </div>
-            )}
 
-            {order.pricingGroup !== "DISTRIBUTOR" && !isPaid && (
-                <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-amber-950">
-                    <AlertCircle className="size-5 shrink-0 text-amber-600 mt-0.5" aria-hidden />
-                    <div className="text-[13px] leading-relaxed">
-                        <span className="font-bold">Payment Required:</span>{" "}
-                        This is a consumer/wholesale order. Full payment must be received and marked as paid before shipping can proceed.
-                    </div>
-                </div>
-            )}
-
-            {error && (
-                <p className="rounded-xl bg-coral/10 px-4 py-3 text-[14px] font-medium text-coral">{error}</p>
-            )}
-
-            {/* Main Content: Two Columns */}
-            <div className="grid gap-6 lg:grid-cols-3">
-                {/* Left Column (2/3 width): Items, Packing, Timeline */}
-                <div className="lg:col-span-2 space-y-6">
-                    {/* Items Card */}
-                    <div className="rounded-3xl bg-white p-6 shadow-card border border-teal-950/10">
-                        <div className="flex items-center justify-between border-b border-black/5 pb-4">
-                            <div className="flex items-center gap-2">
-                                <Box className="size-5 text-teal-950" />
-                                <h2 className="text-[16px] font-extrabold text-teal-950">
-                                    Ordered Items ({order.items?.length || 0})
-                                </h2>
-                            </div>
-                            <span className="text-[12px] font-bold text-muted">
-                                Subtotal: {money(order.subtotal, order.currency)}
+                {/* Column 3: Totals & Financial Verification */}
+                <div className="rounded-2xl bg-white p-3.5 shadow-2xs border border-teal-950/10 flex flex-col justify-between">
+                    <div>
+                        <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted">Grand Total</span>
+                            <span className="text-[10px] font-bold text-muted">
+                                Items: {money(order.subtotal, order.currency)}
                             </span>
                         </div>
+                        <div className="flex items-baseline justify-between mt-0.5">
+                            <p className="text-[20px] font-black text-teal-950">
+                                {money(order.grandTotal, order.currency)}
+                            </p>
+                            <span className="text-[11px] font-semibold text-muted">
+                                Tax: {money(order.taxTotal, order.currency)} · Ship: {money(order.shippingTotal, order.currency)}
+                            </span>
+                        </div>
+                    </div>
+                    <div className="mt-1 pt-1 border-t border-black/5 flex items-center justify-between text-[11px]">
+                        <span className="font-medium text-muted">
+                            {isPaid ? "Payment Verified" : "Payment Pending"}
+                        </span>
+                        <div className="flex items-center gap-2">
+                            {canMarkUnpaid && (
+                                <button
+                                    type="button"
+                                    onClick={() => setMarkUnpaidOpen(true)}
+                                    className="text-amber-800 font-bold hover:underline"
+                                >
+                                    Revert Unpaid
+                                </button>
+                            )}
+                            {order.grandTotal - order.refundedTotal > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={() => setRefundOpen(true)}
+                                    className="text-coral font-bold hover:underline"
+                                >
+                                    Refund
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
 
+            {/* 3. OPERATIONAL WORKSPACE TABS - ZERO SCROLL FATIGUE */}
+            <div className="rounded-3xl bg-white p-4 sm:p-5 shadow-card border border-teal-950/10">
+                {/* Clean Tab Switcher Bar */}
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-black/10 pb-3">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab("items")}
+                            className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[13px] font-bold transition-all ${
+                                activeTab === "items"
+                                    ? "bg-teal-950 text-white shadow-2xs"
+                                    : "bg-soft-control/60 text-teal-950 hover:bg-soft-control"
+                            }`}
+                        >
+                            <Box className="size-4" />
+                            Ordered Items ({order.items?.length || 0})
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab("pack")}
+                            className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[13px] font-bold transition-all ${
+                                activeTab === "pack"
+                                    ? "bg-teal-950 text-white shadow-2xs"
+                                    : "bg-soft-control/60 text-teal-950 hover:bg-soft-control"
+                            }`}
+                        >
+                            <Box className="size-4" />
+                            Pack Boxes &amp; Pallets
+                            {order.status === "PACKED" || order.status === "SHIPPED" ? (
+                                <span className="size-2 rounded-full bg-emerald-500" />
+                            ) : null}
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab("ship")}
+                            className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[13px] font-bold transition-all ${
+                                activeTab === "ship"
+                                    ? "bg-teal-950 text-white shadow-2xs"
+                                    : "bg-soft-control/60 text-teal-950 hover:bg-soft-control"
+                            }`}
+                        >
+                            <Truck className="size-4" />
+                            Carrier &amp; Shipping
+                            {order.trackingNumber && (
+                                <span className="size-2 rounded-full bg-emerald-500" />
+                            )}
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab("timeline")}
+                            className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[13px] font-bold transition-all ${
+                                activeTab === "timeline"
+                                    ? "bg-teal-950 text-white shadow-2xs"
+                                    : "bg-soft-control/60 text-teal-950 hover:bg-soft-control"
+                            }`}
+                        >
+                            <ClipboardList className="size-4" />
+                            Timeline ({order.timeline?.length || 0})
+                        </button>
+                    </div>
+
+                    {/* Quick helper indicator */}
+                    <span className="text-[12px] font-semibold text-muted hidden sm:inline-block">
+                        Status: <strong className="text-teal-950">{order.status.replace(/_/g, " ")}</strong>
+                    </span>
+                </div>
+
+                {/* TAB 1: ORDERED ITEMS */}
+                {activeTab === "items" && (
+                    <div className="pt-4">
                         <div className="divide-y divide-black/5">
                             {(order.items || []).map((line) => (
-                                <div key={line.sku} className="flex items-start gap-4 py-4 first:pt-4 last:pb-0">
-                                    {/* Thumbnail */}
-                                    <div className="relative size-16 shrink-0 overflow-hidden rounded-2xl bg-canvas border border-black/10">
+                                <div key={line.sku} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                                    <div className="relative size-14 shrink-0 overflow-hidden rounded-2xl bg-canvas border border-black/10">
                                         {/* eslint-disable-next-line @next/next/no-img-element */}
                                         <img
                                             src={productImageSrc(line.image, line.productSlug || line.productName)}
@@ -553,304 +614,108 @@ export default function AdminOrderDetailPage({
                                             }}
                                         />
                                     </div>
-
-                                    {/* Details */}
                                     <div className="min-w-0 flex-1">
-                                        <h3 className="text-[14px] font-bold text-teal-950 leading-snug">
+                                        <h3 className="text-[14px] font-bold text-teal-950 truncate">
                                             {line.productName}
                                         </h3>
-                                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px] text-muted">
-                                            <span className="font-mono text-neutral-600 font-semibold">{line.sku}</span>
-                                            <span>•</span>
-                                            <span>Unit: <strong className="text-teal-950">{line.unit}</strong></span>
-                                            <span>•</span>
-                                            <span>Price: <strong className="text-teal-950">{money(line.unitPrice, order.currency)}</strong></span>
+                                        <div className="flex flex-wrap items-center gap-2 text-[12px] text-muted mt-0.5">
+                                            <span className="font-mono">{line.sku}</span>
+                                            <span>• Unit: <strong className="text-teal-950">{line.unit}</strong></span>
+                                            <span>• Unit Price: <strong className="text-teal-950">{money(line.unitPrice, order.currency)}</strong></span>
                                             {!line.taxable && (
-                                                <span className="rounded-full bg-soft-control px-2 py-0.2 text-[10px] font-bold uppercase text-teal-900">
-                                                    Tax-exempt
+                                                <span className="rounded-full bg-soft-control px-2 text-[10px] font-bold uppercase text-teal-900">
+                                                    Tax-Exempt
                                                 </span>
                                             )}
                                         </div>
                                     </div>
-
-                                    {/* Quantity & Total */}
                                     <div className="text-right shrink-0">
-                                        <span className="inline-block rounded-lg bg-soft-control px-2.5 py-1 text-[12px] font-black text-teal-950">
+                                        <span className="inline-block rounded-lg bg-soft-control px-2.5 py-0.5 text-[12px] font-black text-teal-950">
                                             ×{line.quantity}
                                         </span>
-                                        <p className="mt-1 text-[14px] font-extrabold text-teal-950">
+                                        <p className="text-[14px] font-black text-teal-950 mt-0.5">
                                             {money(line.lineTotal, order.currency)}
                                         </p>
                                     </div>
                                 </div>
                             ))}
                         </div>
-                    </div>
 
-                    {/* Order Packaging Panel */}
-                    <OrderPackPanel order={order} onPacked={setOrder} />
-
-                    {/* Order Activity Timeline */}
-                    <div className="rounded-3xl bg-white p-6 shadow-card border border-teal-950/10">
-                        <div className="flex items-center gap-2 border-b border-black/5 pb-3">
-                            <ClipboardList className="size-4 text-teal-950" aria-hidden />
-                            <h2 className="text-[16px] font-extrabold text-teal-950">Order Activity Timeline</h2>
-                        </div>
-                        <div className="mt-4">
-                            <OrderTimeline events={order.timeline || []} />
+                        <div className="mt-4 flex flex-wrap items-center justify-between border-t border-black/5 pt-3 text-[13px]">
+                            <span className="text-muted">Need to pack this order?</span>
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab("pack")}
+                                className="inline-flex items-center gap-1 font-bold text-teal-950 hover:underline"
+                            >
+                                Open Pack Boxes Panel <ArrowRight className="size-3.5" />
+                            </button>
                         </div>
                     </div>
-                </div>
+                )}
 
-                {/* Right Column (1/3 width): Customer, Totals & Payment, Fulfillment, Status */}
-                <div className="space-y-6">
-                    {/* Customer & Destination Card */}
-                    <div className="rounded-3xl bg-white p-5 shadow-card border border-teal-950/10">
-                        <div className="flex items-center justify-between border-b border-black/5 pb-3">
-                            <div className="flex items-center gap-2">
-                                <User className="size-4 text-teal-950" />
-                                <h2 className="text-[15px] font-bold text-teal-950">Customer &amp; Delivery</h2>
-                            </div>
-                            <span className="rounded-full bg-navy/10 px-2 py-0.5 text-[10px] font-bold uppercase text-navy">
-                                {order.pricingGroup}
-                            </span>
-                        </div>
-
-                        <div className="mt-3 space-y-3 text-[13px]">
-                            <div>
-                                <span className="text-[11px] font-bold uppercase tracking-wider text-muted">Customer Name</span>
-                                <p className="font-bold text-teal-950 mt-0.5 text-[14px]">
-                                    {order.shippingAddress?.fullName || order.email}
-                                </p>
-                            </div>
-
-                            <div>
-                                <span className="text-[11px] font-bold uppercase tracking-wider text-muted">Email</span>
-                                <div className="flex items-center justify-between mt-0.5">
-                                    <a
-                                        href={`mailto:${order.email}`}
-                                        className="font-semibold text-teal-800 hover:underline truncate"
-                                    >
-                                        {order.email}
-                                    </a>
-                                    <button
-                                        type="button"
-                                        onClick={copyCustomerEmail}
-                                        title="Copy email"
-                                        className="text-muted hover:text-teal-950 p-1"
-                                    >
-                                        {copiedEmail ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
-                                    </button>
-                                </div>
-                            </div>
-
-                            {order.shippingAddress?.phone && (
-                                <div>
-                                    <span className="text-[11px] font-bold uppercase tracking-wider text-muted">Phone</span>
-                                    <p className="mt-0.5">
-                                        <a href={`tel:${order.shippingAddress.phone}`} className="font-semibold text-teal-950 hover:underline">
-                                            {order.shippingAddress.phone}
-                                        </a>
-                                    </p>
-                                </div>
-                            )}
-
-                            <div className="border-t border-black/5 pt-3">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-[11px] font-bold uppercase tracking-wider text-muted">Shipping Destination</span>
-                                    <button
-                                        type="button"
-                                        onClick={copyShippingAddress}
-                                        className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-800 hover:underline"
-                                    >
-                                        {copiedAddress ? <Check className="size-3 text-emerald-600" /> : <Copy className="size-3" />}
-                                        {copiedAddress ? "Copied" : "Copy"}
-                                    </button>
-                                </div>
-
-                                {order.shippingAddress ? (
-                                    <div className="mt-1 text-teal-950 leading-relaxed font-medium">
-                                        <p>{order.shippingAddress.line1}</p>
-                                        {order.shippingAddress.line2 && <p>{order.shippingAddress.line2}</p>}
-                                        <p className="font-bold">
-                                            {[order.shippingAddress.city, order.shippingAddress.region, order.shippingAddress.postalCode]
-                                                .filter(Boolean)
-                                                .join(", ")}
-                                        </p>
-                                        <p className="text-neutral-600">{order.shippingAddress.country || "Canada"}</p>
-
-                                        <a
-                                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddressText)}`}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:text-teal-950"
-                                        >
-                                            <MapPin className="size-3" />
-                                            View on Google Maps <ExternalLink className="size-2.5" />
-                                        </a>
-                                    </div>
-                                ) : (
-                                    <p className="mt-1 text-muted italic">No shipping address recorded</p>
-                                )}
-                            </div>
-                        </div>
+                {/* TAB 2: PACK BOXES & PALLETS */}
+                {activeTab === "pack" && (
+                    <div className="pt-2">
+                        <OrderPackPanel
+                            order={order}
+                            onPacked={(updated) => {
+                                setOrder(updated);
+                                setActiveTab("ship"); // automatically step forward to shipping upon saving packing!
+                            }}
+                        />
                     </div>
+                )}
 
-                    {/* Totals & Financial Management Card */}
-                    <div className="rounded-3xl bg-white p-5 shadow-card border border-teal-950/10">
-                        <div className="flex items-center justify-between border-b border-black/5 pb-3">
-                            <h2 className="text-[15px] font-bold text-teal-950">Totals &amp; Payment</h2>
-                            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
-                                isPaid ? "bg-emerald-100 text-emerald-900" : "bg-amber-100 text-amber-900"
-                            }`}>
-                                {isPaid ? "Payment Captured" : "Payment Pending"}
-                            </span>
-                        </div>
-
-                        <dl className="mt-3 space-y-2 text-[13px]">
-                            <div className="flex justify-between">
-                                <dt className="text-muted">Products Subtotal</dt>
-                                <dd className="font-semibold text-teal-950">{money(order.subtotal, order.currency)}</dd>
-                            </div>
-                            <div className="flex justify-between">
-                                <dt className="text-muted">Shipping</dt>
-                                <dd className="font-semibold text-teal-950">{money(order.shippingTotal, order.currency)}</dd>
-                            </div>
-                            <div className="flex justify-between">
-                                <dt className="text-muted">Taxes (GST/HST/PST)</dt>
-                                <dd className="font-semibold text-teal-950">{money(order.taxTotal, order.currency)}</dd>
-                            </div>
-                            <div className="flex justify-between border-t border-black/10 pt-2 text-[15px] font-black text-teal-950">
-                                <dt>Grand Total</dt>
-                                <dd>{money(order.grandTotal, order.currency)}</dd>
-                            </div>
-                            {order.refundedTotal > 0 && (
-                                <div className="flex justify-between text-coral font-bold pt-1">
-                                    <dt>Refunded</dt>
-                                    <dd>-{money(order.refundedTotal, order.currency)}</dd>
-                                </div>
-                            )}
-                        </dl>
-
-                        {carrierCost !== null && (
-                            <div className="mt-3 border-t border-black/5 pt-2 text-[12px]">
-                                <div className="flex justify-between">
-                                    <span className="text-muted">Internal Carrier Cost:</span>
-                                    <span className="font-bold text-teal-950">{money(carrierCost, order.currency)}</span>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Payment Verification Inline Controls */}
-                        <div className="mt-4 border-t border-black/5 pt-3">
-                            {canMarkPaid && (
-                                <div className="space-y-2">
-                                    <span className="text-[11px] font-bold uppercase tracking-wider text-muted">Verify Payment</span>
-                                    <p className="text-[11px] text-muted">
-                                        {order.paymentMethod === "E_TRANSFER"
-                                            ? "Customer e-transfers to info@wataniandsons.com. Record payment reference below."
-                                            : "Verify payment received outside of the payment gateway."}
-                                    </p>
-                                    <input
-                                        type="text"
-                                        value={markPaidReference}
-                                        onChange={(e) => setMarkPaidReference(e.target.value)}
-                                        placeholder="Reference (e.g. e-transfer #)"
-                                        className="h-9 w-full rounded-xl border border-black/10 px-3 text-[12px] outline-none focus:border-teal-950"
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => setMarkPaidOpen(true)}
-                                        className="w-full rounded-xl bg-teal-950 py-2 text-[12px] font-bold text-white hover:bg-teal-900 transition-colors shadow-2xs"
-                                    >
-                                        Mark as Paid
-                                    </button>
-                                </div>
-                            )}
-
-                            {canMarkUnpaid && (
-                                <div className="pt-1">
-                                    <button
-                                        type="button"
-                                        onClick={() => setMarkUnpaidOpen(true)}
-                                        className="w-full rounded-xl border border-amber-500/30 bg-amber-50 py-1.5 text-[12px] font-bold text-amber-900 hover:bg-amber-100 transition-colors"
-                                    >
-                                        Revert to Unpaid
-                                    </button>
-                                </div>
-                            )}
-
-                            {order.grandTotal - order.refundedTotal > 0 && (
-                                <div className="mt-2 pt-2 border-t border-black/5">
-                                    <button
-                                        type="button"
-                                        onClick={() => setRefundOpen(true)}
-                                        className="w-full rounded-xl border border-coral/30 py-1.5 text-[12px] font-bold text-coral hover:bg-coral/10 transition-colors"
-                                    >
-                                        Issue Refund
-                                    </button>
-                                </div>
-                            )}
-                        </div>
+                {/* TAB 3: CARRIER BOOKING & SHIPPING */}
+                {activeTab === "ship" && (
+                    <div className="pt-2">
+                        <OrderShipPanel
+                            order={order}
+                            carrierCost={carrierCost}
+                            onBooked={(detail) => {
+                                setOrder(detail.order);
+                                setCarrierCost(detail.carrierCost);
+                            }}
+                        />
                     </div>
+                )}
 
-                    {/* Carrier Shipment & Fulfillment Panel */}
-                    <OrderShipPanel
-                        order={order}
-                        carrierCost={carrierCost}
-                        onBooked={(detail) => {
-                            setOrder(detail.order);
-                            setCarrierCost(detail.carrierCost);
-                        }}
-                    />
-
-                    {/* Order Status Workflow Transitions */}
-                    {nextStatuses.length > 0 && (
-                        <div className="rounded-3xl bg-white p-5 shadow-card border border-teal-950/10">
-                            <h2 className="text-[15px] font-bold text-teal-950">Update Status</h2>
-                            <p className="mt-1 text-[12px] text-muted">Currently {order.status.replace(/_/g, " ").toLowerCase()}.</p>
-                            <div className="mt-3 space-y-2">
-                                {nextStatuses.map((status, index) => (
-                                    <button
-                                        key={status}
-                                        type="button"
-                                        onClick={() => setPendingStatus(status)}
-                                        className={`flex h-10 w-full items-center justify-between rounded-xl px-4 text-[12px] font-bold transition-colors ${
-                                            index === 0
-                                                ? "bg-teal-950 text-white hover:bg-teal-900 shadow-2xs"
-                                                : "bg-soft-control text-teal-950 hover:bg-black/5"
-                                        }`}
-                                    >
-                                        Mark as {status.replace(/_/g, " ")}
-                                        <ArrowRight className="size-3.5" aria-hidden />
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Danger Zone: Delete Order */}
-                    <div className="rounded-3xl bg-white p-5 shadow-card border border-coral/20">
-                        <div className="flex items-center gap-2">
-                            <Trash2 className="size-4 text-coral" aria-hidden />
-                            <h2 className="text-[14px] font-bold text-coral">Delete Order</h2>
-                        </div>
-                        <p className="mt-1 text-[11px] text-muted">
-                            Permanently remove this order and all associated line records from the store.
-                        </p>
-                        <button
-                            type="button"
-                            onClick={() => setDeleteOpen(true)}
-                            className="mt-3 flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-coral/10 text-[12px] font-bold text-coral transition-colors hover:bg-coral hover:text-white cursor-pointer"
-                        >
-                            <Trash2 className="size-3.5" aria-hidden />
-                            Delete order
-                        </button>
+                {/* TAB 4: ORDER ACTIVITY TIMELINE */}
+                {activeTab === "timeline" && (
+                    <div className="pt-4">
+                        <OrderTimeline events={order.timeline || []} />
                     </div>
-                </div>
+                )}
             </div>
 
-            {/* Dialogs */}
+            {/* 4. COMPACT FOOTER ACTIONS (STATUS TRANSITIONS & DANGER ZONE) */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                <div className="flex flex-wrap items-center gap-2">
+                    {nextStatuses.map((status) => (
+                        <button
+                            key={status}
+                            type="button"
+                            onClick={() => setPendingStatus(status)}
+                            className="inline-flex items-center gap-1 rounded-xl border border-black/15 bg-white px-3 py-1.5 text-[12px] font-bold text-teal-950 hover:bg-soft-control transition-colors shadow-2xs"
+                        >
+                            Mark as {status.replace(/_/g, " ")}
+                            <ArrowRight className="size-3 text-muted" />
+                        </button>
+                    ))}
+                </div>
+
+                <button
+                    type="button"
+                    onClick={() => setDeleteOpen(true)}
+                    className="inline-flex items-center gap-1 rounded-xl border border-coral/30 px-3 py-1.5 text-[12px] font-bold text-coral hover:bg-coral/10 transition-colors"
+                >
+                    <Trash2 className="size-3" />
+                    Delete Order
+                </button>
+            </div>
+
+            {/* DIALOGS */}
             <ConfirmDialog
                 open={pendingStatus !== null}
                 title={`Mark as ${pendingStatus?.replace(/_/g, " ")}?`}
