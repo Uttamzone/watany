@@ -415,11 +415,18 @@ export default function PortalOrderDetailPage({
                                     <div className="relative size-16 shrink-0 overflow-hidden rounded-2xl bg-canvas border border-black/10">
                                         {/* eslint-disable-next-line @next/next/no-img-element */}
                                         <img
-                                            src={productImageSrc(line.image, line.productSlug || line.productName)}
+                                            src={productImageSrc(
+                                                line.image || (line as any).imageUrl || (line as any).image_url || (line as any).productImage,
+                                                line.productSlug || line.productName,
+                                                line.sku
+                                            )}
                                             alt={line.productName}
                                             className="size-full object-cover"
                                             onError={(e) => {
-                                                (e.currentTarget as HTMLImageElement).src = "/images/placeholder.png";
+                                                const target = e.currentTarget as HTMLImageElement;
+                                                if (!target.src.includes("placeholder.png")) {
+                                                    target.src = "/images/placeholder.png";
+                                                }
                                             }}
                                         />
                                     </div>

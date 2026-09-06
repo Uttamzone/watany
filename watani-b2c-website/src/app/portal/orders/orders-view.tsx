@@ -131,11 +131,18 @@ export function OrdersView() {
                                         <div className="relative size-12 shrink-0 overflow-hidden rounded-xl bg-canvas border border-black/5">
                                             {/* eslint-disable-next-line @next/next/no-img-element */}
                                             <img
-                                                src={productImageSrc(order.items?.[0]?.image || (order.items?.[0] as any)?.productImage || (order.items?.[0] as any)?.imageUrl)}
+                                                src={productImageSrc(
+                                                    order.items?.[0]?.image || (order.items?.[0] as any)?.imageUrl || (order.items?.[0] as any)?.image_url || (order.items?.[0] as any)?.productImage,
+                                                    order.items?.[0]?.productSlug || order.items?.[0]?.productName,
+                                                    order.items?.[0]?.sku
+                                                )}
                                                 alt={order.items?.[0]?.productName ?? "Order"}
                                                 className="size-full object-cover"
                                                 onError={(e) => {
-                                                    (e.currentTarget as HTMLImageElement).src = "/images/placeholder.png";
+                                                    const target = e.currentTarget as HTMLImageElement;
+                                                    if (!target.src.includes("placeholder.png")) {
+                                                        target.src = "/images/placeholder.png";
+                                                    }
                                                 }}
                                             />
                                         </div>

@@ -535,16 +535,23 @@ export default function AdminOrderDetailPage({
                         </div>
 
                         <div className="divide-y divide-black/5">
-                            {(order.items || []).map((line) => (
-                                <div key={line.sku} className="flex items-center gap-3 py-3 first:pt-3 last:pb-0">
+                            {(order.items || []).map((line, idx) => (
+                                <div key={line.id ? `${line.id}-${idx}` : `${line.sku || "item"}-${idx}`} className="flex items-center gap-3 py-3 first:pt-3 last:pb-0">
                                     <div className="relative size-14 shrink-0 overflow-hidden rounded-2xl bg-canvas border border-black/10">
                                         {/* eslint-disable-next-line @next/next/no-img-element */}
                                         <img
-                                            src={productImageSrc(line.image, line.productSlug || line.productName)}
+                                            src={productImageSrc(
+                                                line.image || (line as any).imageUrl || (line as any).image_url || (line as any).productImage,
+                                                line.productSlug || line.productName,
+                                                line.sku
+                                            )}
                                             alt={line.productName}
                                             className="size-full object-cover"
                                             onError={(e) => {
-                                                (e.currentTarget as HTMLImageElement).src = "/images/placeholder.png";
+                                                const target = e.currentTarget as HTMLImageElement;
+                                                if (!target.src.includes("placeholder.png")) {
+                                                    target.src = "/images/placeholder.png";
+                                                }
                                             }}
                                         />
                                     </div>

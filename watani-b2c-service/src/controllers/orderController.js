@@ -1,5 +1,39 @@
+const path = require('path');
+const fs = require('fs');
 const db = require('../db');
 const { logAudit } = require('../services/auditService');
+
+let catalogueMap = new Map();
+try {
+    const catPath = path.join(__dirname, '../db/catalogueData.json');
+    if (fs.existsSync(catPath)) {
+        const catData = JSON.parse(fs.readFileSync(catPath, 'utf8'));
+        for (const item of catData) {
+            if (item.slug) catalogueMap.set(item.slug.toLowerCase().trim(), item);
+            if (item.name) catalogueMap.set(item.name.toLowerCase().trim(), item);
+            if (item.sku) catalogueMap.set(item.sku.toUpperCase().trim(), item);
+            if (item.fullName) catalogueMap.set(item.fullName.toLowerCase().trim(), item);
+        }
+    }
+} catch (e) {
+    console.warn('[orderController] Could not load catalogueData.json:', e.message);
+}
+
+function resolveOrderItemImage(item) {
+    const pName = (item.productName || item.product_name || '').trim();
+    const pSlug = (item.productSlug || item.product_slug || '').trim();
+    const pSku = (item.sku || '').toUpperCase().trim();
+    let img = item.image || item.imageUrl || item.image_url;
+    if (!img || img === '/logo/watany-logo.png' || img.includes('placeholder')) {
+        const match = (pSku && catalogueMap.get(pSku)) ||
+                      (pSlug && catalogueMap.get(pSlug.toLowerCase())) ||
+                      (pName && catalogueMap.get(pName.toLowerCase()));
+        if (match && match.image) {
+            img = match.image;
+        }
+    }
+    return img || '/logo/watany-logo.png';
+}
 
 async function reconcileStripePaymentIfPending(order, req) {
     if (!order || order.status === 'PROCESSING' || order.paymentStatus === 'PAID') return;
@@ -139,8 +173,8 @@ async function getOrders(req, res) {
                     productSlug: item.productSlug,
                     sku: item.sku,
                     unit: item.unit || '1 Unit',
-                    image: item.imageUrl || '/logo/watany-logo.png',
-                    imageUrl: item.imageUrl || '/logo/watany-logo.png',
+                    image: resolveOrderItemImage(item),
+                    imageUrl: resolveOrderItemImage(item),
                     quantity: item.quantity || 1,
                     unitPrice: uPrice,
                     retailPrice,
@@ -239,8 +273,8 @@ async function getOrderByNumber(req, res) {
                 productSlug: item.productSlug,
                 sku: item.sku,
                 unit: item.unit || '1 Unit',
-                image: item.imageUrl || '/logo/watany-logo.png',
-                imageUrl: item.imageUrl || '/logo/watany-logo.png',
+                image: resolveOrderItemImage(item),
+                imageUrl: resolveOrderItemImage(item),
                 quantity: item.quantity || 1,
                 unitPrice: uPrice,
                 retailPrice,
@@ -399,8 +433,8 @@ async function lookupOrder(req, res) {
             productSlug: item.productSlug,
             sku: item.sku,
             unit: item.unit || '1 Unit',
-            image: item.imageUrl || '/logo/watany-logo.png',
-            imageUrl: item.imageUrl || '/logo/watany-logo.png',
+            image: resolveOrderItemImage(item),
+            imageUrl: resolveOrderItemImage(item),
             quantity: item.quantity || 1,
             unitPrice: parseFloat(item.unitPrice) || 0,
             lineTotal: parseFloat(item.lineTotal) || 0

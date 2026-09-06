@@ -1,8 +1,42 @@
+const path = require('path');
+const fs = require('fs');
 const db = require('../db');
 const { resolvePrice } = require('../services/pricing');
 const { getFreightcomQuotes } = require('../services/freightcom');
 const { logAudit } = require('../services/auditService');
 const { dispatchInvoiceEmailForOrder } = require('../services/emailService');
+
+let catalogueMap = new Map();
+try {
+    const catPath = path.join(__dirname, '../db/catalogueData.json');
+    if (fs.existsSync(catPath)) {
+        const catData = JSON.parse(fs.readFileSync(catPath, 'utf8'));
+        for (const item of catData) {
+            if (item.slug) catalogueMap.set(item.slug.toLowerCase().trim(), item);
+            if (item.name) catalogueMap.set(item.name.toLowerCase().trim(), item);
+            if (item.sku) catalogueMap.set(item.sku.toUpperCase().trim(), item);
+            if (item.fullName) catalogueMap.set(item.fullName.toLowerCase().trim(), item);
+        }
+    }
+} catch (e) {
+    console.warn('[checkoutController] Could not load catalogueData.json:', e.message);
+}
+
+function resolveProductImage(item) {
+    const pName = (item.product_name || item.productName || '').trim();
+    const pSlug = (item.product_slug || item.productSlug || '').trim();
+    const pSku = (item.sku || '').toUpperCase().trim();
+    let img = item.image_url || item.imageUrl || item.image;
+    if (!img || img === '/logo/watany-logo.png' || img.includes('placeholder')) {
+        const match = (pSku && catalogueMap.get(pSku)) ||
+                      (pSlug && catalogueMap.get(pSlug.toLowerCase())) ||
+                      (pName && catalogueMap.get(pName.toLowerCase()));
+        if (match && match.image) {
+            img = match.image;
+        }
+    }
+    return img || '/logo/watany-logo.png';
+}
 
 async function getQuote(req, res) {
     try {
@@ -215,7 +249,7 @@ async function createIntent(req, res) {
                 productSlug: item.product_slug,
                 sku: item.sku,
                 unit: item.unit,
-                imageUrl: item.image_url || '/logo/watany-logo.png',
+                imageUrl: resolveProductImage(item),
                 quantity: item.quantity,
                 unitPrice: priceInfo.price,
                 lineTotal,

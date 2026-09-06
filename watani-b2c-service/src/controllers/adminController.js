@@ -10,12 +10,30 @@ try {
     if (fs.existsSync(catPath)) {
         const catData = JSON.parse(fs.readFileSync(catPath, 'utf8'));
         for (const item of catData) {
-            if (item.slug) catalogueMap.set(item.slug.toLowerCase(), item);
-            if (item.name) catalogueMap.set(item.name.toLowerCase(), item);
+            if (item.slug) catalogueMap.set(item.slug.toLowerCase().trim(), item);
+            if (item.name) catalogueMap.set(item.name.toLowerCase().trim(), item);
+            if (item.sku) catalogueMap.set(item.sku.toUpperCase().trim(), item);
+            if (item.fullName) catalogueMap.set(item.fullName.toLowerCase().trim(), item);
         }
     }
 } catch (e) {
     console.warn('[adminController] Could not load catalogueData.json:', e.message);
+}
+
+function resolveOrderItemImage(item) {
+    const pName = (item.productName || item.product_name || '').trim();
+    const pSlug = (item.productSlug || item.product_slug || '').trim();
+    const pSku = (item.sku || '').toUpperCase().trim();
+    let img = item.image || item.imageUrl || item.image_url;
+    if (!img || img === '/logo/watany-logo.png' || img.includes('placeholder')) {
+        const match = (pSku && catalogueMap.get(pSku)) ||
+                      (pSlug && catalogueMap.get(pSlug.toLowerCase())) ||
+                      (pName && catalogueMap.get(pName.toLowerCase()));
+        if (match && match.image) {
+            img = match.image;
+        }
+    }
+    return img || '/logo/watany-logo.png';
 }
 
 /* ------------------------------------------------------------- Customers */
@@ -668,21 +686,25 @@ function formatOrderRow(order, items = []) {
             postalCode: order.shipPostalCode || order.ship_postal_code || 'K2H 0B6',
             country: order.shipCountry || order.ship_country || 'CA'
         },
-        items: items.map(item => ({
-            id: item.id,
-            productName: item.productName || item.product_name,
-            productSlug: item.productSlug || item.product_slug,
-            sku: item.sku,
-            unit: item.unit || '1 Unit',
-            image: item.image || item.imageUrl || item.image_url || '/logo/watany-logo.png',
-            quantity: item.quantity || 1,
-            unitPrice: parseFloat(item.unitPrice || item.unit_price) || 0,
-            lineTotal: parseFloat(item.lineTotal || item.line_total) || 0,
-            appliedGroup: item.appliedGroup || item.applied_group || 'RETAIL',
-            requestedGroup: item.requestedGroup || item.requested_group || 'RETAIL',
-            taxable: true,
-            unitWeightGrams: null
-        })),
+        items: items.map(item => {
+            const resolvedImage = resolveOrderItemImage(item);
+            return {
+                id: item.id,
+                productName: item.productName || item.product_name,
+                productSlug: item.productSlug || item.product_slug,
+                sku: item.sku,
+                unit: item.unit || '1 Unit',
+                image: resolvedImage,
+                imageUrl: resolvedImage,
+                quantity: item.quantity || 1,
+                unitPrice: parseFloat(item.unitPrice || item.unit_price) || 0,
+                lineTotal: parseFloat(item.lineTotal || item.line_total) || 0,
+                appliedGroup: item.appliedGroup || item.applied_group || 'RETAIL',
+                requestedGroup: item.requestedGroup || item.requested_group || 'RETAIL',
+                taxable: true,
+                unitWeightGrams: null
+            };
+        }),
         timeline: [
             {
                 status: statusVal,

@@ -191,14 +191,45 @@ function toSpecifications(
 /** Shown wherever a product/variant has no image yet - e.g. freshly bulk-uploaded stock. */
 export const PLACEHOLDER_PRODUCT_IMAGE = "/images/placeholder.png";
 
+function normalizeKey(str: string): string {
+    return str
+        .toLowerCase()
+        .replace(/[\u2013\u2014]/g, "-")
+        .replace(/[^a-z0-9]/g, "")
+        .trim();
+}
+
 const fallbackImageBySlug = new Map<string, string>();
+const fallbackImageBySku = new Map<string, string>();
+const fallbackImageByName = new Map<string, string>();
+const fallbackImageByNorm = new Map<string, string>();
+
 for (const fp of fallbackProducts) {
-    if (fp.slug && fp.image) fallbackImageBySlug.set(fp.slug.toLowerCase(), fp.image);
-    if (fp.name && fp.image) fallbackImageBySlug.set(fp.name.toLowerCase().trim(), fp.image);
+    if (!fp.image) continue;
+    if (fp.slug) {
+        fallbackImageBySlug.set(fp.slug.toLowerCase().trim(), fp.image);
+        fallbackImageByNorm.set(normalizeKey(fp.slug), fp.image);
+    }
+    if (fp.sku) {
+        fallbackImageBySku.set(fp.sku.toUpperCase().trim(), fp.image);
+        fallbackImageByNorm.set(normalizeKey(fp.sku), fp.image);
+    }
+    if (fp.name) {
+        fallbackImageByName.set(fp.name.toLowerCase().trim(), fp.image);
+        fallbackImageByNorm.set(normalizeKey(fp.name), fp.image);
+    }
+    if ((fp as any).fullName) {
+        fallbackImageByName.set(String((fp as any).fullName).toLowerCase().trim(), fp.image);
+        fallbackImageByNorm.set(normalizeKey(String((fp as any).fullName)), fp.image);
+    }
 }
 
 /** Falls back to the placeholder or authentic catalogue image for an empty/missing image path. */
-export function productImageSrc(image: string | null | undefined, slugOrName?: string | null): string {
+export function productImageSrc(
+    image: string | null | undefined,
+    slugOrName?: string | null,
+    sku?: string | null
+): string {
     let raw: string | null | undefined =
         typeof image === "string"
             ? image
@@ -206,14 +237,49 @@ export function productImageSrc(image: string | null | undefined, slugOrName?: s
                 ? (image as any).url
                 : undefined;
 
-    if (!raw || typeof raw !== "string" || raw.trim().length === 0 || raw.includes("placeholder") || raw.includes("watany-logo.png")) {
-        if (slugOrName) {
-            const key = String(slugOrName).toLowerCase().trim();
-            const found = fallbackImageBySlug.get(key);
+    const isInvalid = !raw || typeof raw !== "string" || raw.trim().length === 0 || raw.includes("placeholder") || raw.includes("watany-logo.png");
+
+    if (isInvalid) {
+        // 1. Try SKU first (highest accuracy)
+        if (sku) {
+            const foundSku = fallbackImageBySku.get(sku.toUpperCase().trim()) || fallbackImageByNorm.get(normalizeKey(sku));
+            if (foundSku) raw = foundSku;
+        }
+
+        // 2. Try slug or name if not found by SKU
+        if ((!raw || isInvalid) && slugOrName) {
+            const key = String(slugOrName).trim();
+            const keyLower = key.toLowerCase();
+            const keyNorm = normalizeKey(key);
+
+            let found = fallbackImageBySku.get(key.toUpperCase()) ||
+                        fallbackImageBySlug.get(keyLower) ||
+                        fallbackImageByName.get(keyLower) ||
+                        fallbackImageByNorm.get(keyNorm);
+
+            // Fuzzy substring matching if still not found
+            if (!found) {
+                for (const fp of fallbackProducts) {
+                    if (!fp.image) continue;
+                    if (fp.slug && (keyLower.includes(fp.slug) || fp.slug.includes(keyLower))) {
+                        found = fp.image;
+                        break;
+                    }
+                    if (fp.name && (keyLower.includes(fp.name.toLowerCase()) || fp.name.toLowerCase().includes(keyLower))) {
+                        found = fp.image;
+                        break;
+                    }
+                }
+            }
+
             if (found) raw = found;
         }
     }
-    if (!raw || typeof raw !== "string" || raw.trim().length === 0) return PLACEHOLDER_PRODUCT_IMAGE;
+
+    if (!raw || typeof raw !== "string" || raw.trim().length === 0 || raw.includes("watany-logo.png")) {
+        return PLACEHOLDER_PRODUCT_IMAGE;
+    }
+
     const trimmed = raw.trim();
 
     const uploadsIdx = trimmed.indexOf("/uploads/");
