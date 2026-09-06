@@ -56,7 +56,11 @@ export function WishlistProvider({children}: { children: React.ReactNode }) {
             }
 
             try {
-                const loaded = await wishlistApi.getWishlist();
+                const raw = await wishlistApi.getWishlist();
+                // Backend may return a plain array instead of {items: [...]}; normalise to the expected shape.
+                const loaded: Wishlist = Array.isArray(raw)
+                    ? {items: raw as unknown as WishlistItem[]}
+                    : (raw && Array.isArray((raw as Wishlist).items) ? raw : {items: []});
                 if (!cancelled) setWishlist(loaded);
             } catch {
                 // An unreachable backend must never block the storefront.
@@ -129,7 +133,7 @@ export function WishlistProvider({children}: { children: React.ReactNode }) {
     );
 
     const isSaved = useCallback(
-        (variantId: number) => wishlist.items.some((item) => item.variantId === variantId),
+        (variantId: number) => (wishlist?.items ?? []).some((item) => item.variantId === variantId),
         [wishlist],
     );
 
@@ -148,7 +152,7 @@ export function WishlistProvider({children}: { children: React.ReactNode }) {
 
     const value = useMemo<WishlistContextValue>(
         () => ({
-            items: wishlist.items,
+            items: wishlist?.items ?? [],
             isSaved,
             add,
             remove,

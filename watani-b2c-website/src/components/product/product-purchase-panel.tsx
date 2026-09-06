@@ -3,7 +3,7 @@
 import {useEffect, useState} from "react";
 import Link from "next/link";
 import {useRouter} from "next/navigation";
-import {Heart, Leaf, Minus, Package, PackageCheck, Plus, ShoppingCart, Star, Truck} from "lucide-react";
+import {Heart, Leaf, Minus, Plus, ShoppingCart, Star, Truck} from "lucide-react";
 import {useCart} from "@/components/cart/cart-store";
 import {useWishlist} from "@/components/wishlist/wishlist-store";
 import {useAuth} from "@/components/auth/auth-store";
@@ -100,21 +100,22 @@ export function ProductPurchasePanel({product}: { product: Product }) {
                 </p>
             </div>
 
-            {/* Exact requested specifications format */}
+            {/* Specifications: MOQ + unit inline, then prices */}
             {(() => {
                 const retailPrice = product.retailPrice ?? product.pricing?.retailPrice ?? (parseFloat(product.priceMajor || "0") + parseFloat(product.priceMinor || "0") / 100);
                 const wholesalePrice = product.wholesalePrice ?? product.pricing?.wholesalePrice ?? (
-                    product.pricing?.tiers?.find(t => t.pricingGroup === "WHOLESALE")?.unitPrice ?? 
+                    product.pricing?.tiers?.find(t => t.pricingGroup === "WHOLESALE")?.unitPrice ??
                     Math.round((typeof retailPrice === "number" ? retailPrice : parseFloat(String(retailPrice || 0))) * 0.8 * 100) / 100
                 );
 
                 return (
-                    <div className="mt-3.5 rounded-2xl border border-teal-950/10 bg-teal-950/[0.03] p-4 text-[14px]">
-                        <div className="space-y-1 font-semibold text-teal-950">
-                            <div>Moq <span className="font-bold text-teal-950">{moq}</span></div>
-                            <div>Unit <span className="font-bold text-teal-950">{product.unit || "unit"}</span></div>
-                            <div>Price ( retail) :<span className="font-bold text-teal-950">${safeFormatPrice(retailPrice)}</span></div>
-                            <div>Price (wholesale) :<span className="font-bold text-teal-800">${safeFormatPrice(wholesalePrice)}</span></div>
+                    <div className="mt-4 space-y-2 text-[13px]">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                            <span className="font-semibold text-muted">MOQ: <span className="font-bold text-teal-950">{moq} {product.unit || "unit"}</span></span>
+                            <span className="text-black/20">·</span>
+                            <span className="font-semibold text-muted">Retail: <span className="font-bold text-teal-950">${safeFormatPrice(retailPrice)} CAD</span></span>
+                            <span className="text-black/20">·</span>
+                            <span className="font-semibold text-muted">Wholesale: <span className="font-bold text-teal-800">${safeFormatPrice(wholesalePrice)} CAD</span></span>
                         </div>
                     </div>
                 );
@@ -212,45 +213,38 @@ export function ProductPurchasePanel({product}: { product: Product }) {
 
             <hr className="my-6 border-black/[0.07]"/>
 
-            {/* Three attribute icons - design.md §8. */}
-            <ul className="flex flex-wrap gap-6">
+            {/* Product attribute tags — clean, no circles */}
+            <div className="flex flex-wrap gap-2">
                 {[
                     {icon: Leaf, label: categoryName || product.category || "Authentic Product"},
-                    {icon: Package, label: product.unit || "unit"},
                     {icon: Truck, label: "Ships to Canada & USA"},
-                ].map((attribute, idx) => {
+                ].map((attribute) => {
                     const Icon = attribute.icon;
                     return (
-                        <li
-                            key={attribute.label || idx}
-                            className="flex items-center gap-2 text-[13px] font-semibold text-teal-950"
+                        <span
+                            key={attribute.label}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-black/8 bg-soft-control px-3 py-1.5 text-[12px] font-semibold text-teal-950"
                         >
-                            <span className="grid size-9 place-items-center rounded-full bg-soft-control">
-                                <Icon className="size-4" aria-hidden/>
-                            </span>
+                            <Icon className="size-3.5 opacity-70" aria-hidden/>
                             {attribute.label}
-                        </li>
+                        </span>
                     );
                 })}
-            </ul>
+            </div>
 
-            <dl className="mt-6 space-y-2 text-[13px]">
+            <dl className="mt-4 space-y-1.5 text-[13px]">
                 <div className="flex gap-2">
-                    <dt className="font-bold text-teal-950">Minimum Order (MOQ):</dt>
-                    <dd className="font-semibold text-teal-950">{moq} {moq === 1 ? (product.unit || "unit") : `${moq} units`}</dd>
-                </div>
-                <div className="flex gap-2">
-                    <dt className="font-bold text-teal-950">SKU:</dt>
+                    <dt className="font-semibold text-muted">SKU:</dt>
                     <dd className="text-muted">{product.sku}</dd>
                 </div>
                 {product.region && (
                     <div className="flex gap-2">
-                        <dt className="font-bold text-teal-950">Region:</dt>
+                        <dt className="font-semibold text-muted">Region:</dt>
                         <dd className="text-muted">{product.region}, Palestine</dd>
                     </div>
                 )}
                 <div className="flex flex-wrap gap-2">
-                    <dt className="font-bold text-teal-950">Category:</dt>
+                    <dt className="font-semibold text-muted">Category:</dt>
                     <dd>
                         <Link
                             href={`/categories?category=${product.category || ""}`}
@@ -258,17 +252,6 @@ export function ProductPurchasePanel({product}: { product: Product }) {
                         >
                             {categoryName || "General"}
                         </Link>
-                        {categoryName && (
-                            <>
-                                <span className="text-muted">, </span>
-                                <Link
-                                    href={`/categories?category=${product.category || ""}`}
-                                    className="text-muted underline underline-offset-4 transition-colors hover:text-teal-900"
-                                >
-                                    {String(categoryName).toLowerCase()} {product.unit || ""}
-                                </Link>
-                            </>
-                        )}
                     </dd>
                 </div>
             </dl>
